@@ -1,0 +1,361 @@
+# Optional live control for the three floor 2 ACs, in one file.
+# Installed with every switch off. No automatic power or HVAC-mode change is ever sent.
+# The cascade for each unit is: switch on -> arm -> apply -> 15-minute power check.
+# See docs/implementation-guide.md for the guards and docs/plan-and-test.md for the pilot.
+
+input_boolean:
+  ac_lt2_left_control_enabled:
+    name: "AC LT2 Left control"  # new unit: stays off until its plug reports again
+  ac_lt2_middle_control_enabled:
+    name: "AC LT2 Control"
+  ac_lt2_right_control_enabled:
+    name: "AC LT2 Right control"
+
+input_datetime:
+  ac_lt2_left_last_command:
+    name: "AC LT2 Left sent at"
+    has_date: true
+    has_time: true
+  ac_lt2_left_last_manual:
+    name: "AC LT2 Left manual at"
+    has_date: true
+    has_time: true
+  ac_lt2_middle_last_command:
+    name: "AC LT2 Sent at"
+    has_date: true
+    has_time: true
+  ac_lt2_middle_last_manual:
+    name: "AC LT2 Manual at"
+    has_date: true
+    has_time: true
+  ac_lt2_right_last_command:
+    name: "AC LT2 Right sent at"
+    has_date: true
+    has_time: true
+  ac_lt2_right_last_manual:
+    name: "AC LT2 Right manual at"
+    has_date: true
+    has_time: true
+
+input_text:
+  ac_lt2_left_last_applied:
+    name: "AC LT2 Left target"
+    max: 100
+  ac_lt2_middle_last_applied:
+    name: "AC LT2 Target"
+    max: 100
+  ac_lt2_right_last_applied:
+    name: "AC LT2 Right target"
+    max: 100
+
+script:
+  # One implementation of every guard and of the two IR calls. Each thin
+  # automation below passes the entities of its own unit, so a fix here applies
+  # to all three ACs at once.
+  ac_lt2_apply_setting:
+    alias: "AC LT2 - apply setting to one AC"
+    mode: parallel
+    max: 10
+    fields:
+      ac_climate:
+        description: Climate entity of the unit
+      ac_power:
+        description: Power sensor of the unit
+      ac_control_switch:
+        description: input_boolean that authorises this unit
+      ac_last_command:
+        description: input_datetime of the last attempt
+      ac_last_manual:
+        description: input_datetime of the last HA user change
+      ac_last_applied:
+        description: input_text with the last attempted setting
+      ac_setting:
+        description: sensor with the target as <temperature>|<fan>
+      ac_min_temp:
+        description: Lowest setpoint of the unit
+      ac_max_temp:
+        description: Highest setpoint of the unit
+    sequence:
+      - variables:
+          target_setting: "{{ states(ac_setting) }}"
+          target_temperature: "{{ target_setting.split('|')[0] | int(0) }}"
+          target_fan: "{{ target_setting.split('|')[1] if '|' in target_setting else '' }}"
+      - condition: template
+        value_template: "{{ is_state(ac_control_switch, 'on') }}"
+      - condition: state
+        entity_id: input_boolean.ac_adaptive_count_enabled
+        state: "on"
+      - condition: state
+        entity_id: schedule.ac_adaptive_hours
+        state: "on"
+      - condition: state
+        entity_id: binary_sensor.ac_lt2_occupied
+        state: "on"
+      - condition: state
+        entity_id: binary_sensor.ac_lt2_count_stale
+        state: "off"
+      - condition: template
+        value_template: "{{ states(ac_power) | float(0) > 50 }}"
+      # last_reported, not last_changed: an unchanged wattage can still be a fresh report.
+      - condition: template
+        value_template: >-
+          {{ has_value(ac_power)
+             and (now().timestamp()
+                  - as_timestamp(states[ac_power].last_reported, 0)) < 20 * 60 }}
+      - condition: template
+        value_template: >-
+          {{ is_state(ac_climate, 'cool')
+             and ac_min_temp <= target_temperature | int(0) <= ac_max_temp
+             and target_fan in (state_attr(ac_climate, 'fan_modes') or []) }}
+      # Time since the LAST ATTEMPT, including one interrupted by an error.
+      - condition: template
+        value_template: >-
+          {{ now().timestamp()
+             - (state_attr(ac_last_command, 'timestamp') | float(0)) >= 10 * 60 }}
+      - condition: template
+        value_template: >-
+          {{ now().timestamp()
+             - (state_attr(ac_last_manual, 'timestamp') | float(0)) >= 30 * 60 }}
+      - condition: template
+        value_template: "{{ states(ac_last_applied) != target_setting }}"
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: "{{ ac_last_command }}"
+        data:
+          timestamp: "{{ now().timestamp() | int }}"
+      # Record the attempt before sending IR: a service error must not resend it.
+      - action: input_text.set_value
+        target:
+          entity_id: "{{ ac_last_applied }}"
+        data:
+          value: "{{ target_setting }}"
+      # IR is one-way. Never send HVAC mode or power; the unit must already be cooling.
+      - action: climate.set_temperature
+        target:
+          entity_id: "{{ ac_climate }}"
+        data:
+          temperature: "{{ target_temperature }}"
+      - condition: template
+        value_template: "{{ is_state(ac_control_switch, 'on') }}"
+      - action: climate.set_fan_mode
+        target:
+          entity_id: "{{ ac_climate }}"
+        data:
+          fan_mode: "{{ target_fan }}"
+
+automation:
+  # ---- arm: re-enabling a switch is an explicit request to send the current target
+  - id: ac_lt2_arm
+    alias: "AC floor 2 - arm the three units"
+    triggers:
+      - trigger: state
+        entity_id:
+          - input_boolean.ac_lt2_left_control_enabled
+          - input_boolean.ac_lt2_middle_control_enabled
+          - input_boolean.ac_lt2_right_control_enabled
+        to: "on"
+    actions:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.entity_id == 'input_boolean.ac_lt2_left_control_enabled' }}"
+            sequence:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.ac_lt2_left_last_applied
+                data:
+                  value: "armed"
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.entity_id == 'input_boolean.ac_lt2_middle_control_enabled' }}"
+            sequence:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.ac_lt2_middle_last_applied
+                data:
+                  value: "armed"
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.entity_id == 'input_boolean.ac_lt2_right_control_enabled' }}"
+            sequence:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.ac_lt2_right_last_applied
+                data:
+                  value: "armed"
+
+  # ---- manual pause: a HA user change pauses only that unit
+  - id: ac_lt2_manual_pause
+    alias: "AC floor 2 - record HA manual change"
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id:
+          - climate.ac_sharp_lt_2_kiri
+          - climate.ac_sharp_lt_2_tengah
+          - climate.ac_lg_2_2
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.to_state is not none
+             and trigger.to_state.context.user_id is not none
+             and trigger.to_state.context.parent_id is none
+             and (trigger.from_state is none
+                  or trigger.from_state.state != trigger.to_state.state
+                  or trigger.from_state.attributes.get('temperature') != trigger.to_state.attributes.get('temperature')
+                  or trigger.from_state.attributes.get('fan_mode') != trigger.to_state.attributes.get('fan_mode')) }}
+    actions:
+      - variables:
+          unit: >-
+            {{ {'climate.ac_sharp_lt_2_kiri': 'left',
+                'climate.ac_sharp_lt_2_tengah': 'middle',
+                'climate.ac_lg_2_2': 'right'}[trigger.entity_id] }}
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: "input_datetime.ac_lt2_{{ unit }}_last_manual"
+        data:
+          timestamp: "{{ now().timestamp() | int }}"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: "input_boolean.ac_lt2_{{ unit }}_control_enabled"
+      - action: input_text.set_value
+        target:
+          entity_id: "input_text.ac_lt2_{{ unit }}_last_applied"
+        data:
+          value: "manual change"
+
+  # ---- apply: one thin automation per unit; the logic lives in the script
+  - id: ac_lt2_left_apply
+    alias: "AC floor 2 left - apply people-based setting"
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: time_pattern
+        minutes: "/1"
+      - trigger: state
+        entity_id: sensor.ac_lt2_left_recommended_setting
+      - trigger: state
+        entity_id: sensor.0x60b763fffe1e451c_power
+      - trigger: state
+        entity_id: input_boolean.ac_lt2_left_control_enabled
+        to: "on"
+      - trigger: state
+        entity_id: input_text.ac_lt2_left_last_applied
+        to: "armed"
+    actions:
+      - action: script.ac_lt2_apply_setting
+        data:
+          ac_climate: climate.ac_sharp_lt_2_kiri
+          ac_power: sensor.0x60b763fffe1e451c_power
+          ac_control_switch: input_boolean.ac_lt2_left_control_enabled
+          ac_last_command: input_datetime.ac_lt2_left_last_command
+          ac_last_manual: input_datetime.ac_lt2_left_last_manual
+          ac_last_applied: input_text.ac_lt2_left_last_applied
+          ac_setting: sensor.ac_lt2_left_recommended_setting
+          ac_min_temp: 18
+          ac_max_temp: 30
+
+  - id: ac_lt2_middle_apply
+    alias: "AC floor 2 middle - apply people-based setting"
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: time_pattern
+        minutes: "/1"
+      - trigger: state
+        entity_id: sensor.ac_lt2_middle_recommended_setting
+      - trigger: state
+        entity_id: sensor.0x60b763fffe1f48ee_power
+      - trigger: state
+        entity_id: input_boolean.ac_lt2_middle_control_enabled
+        to: "on"
+      - trigger: state
+        entity_id: input_text.ac_lt2_middle_last_applied
+        to: "armed"
+    actions:
+      - action: script.ac_lt2_apply_setting
+        data:
+          ac_climate: climate.ac_sharp_lt_2_tengah
+          ac_power: sensor.0x60b763fffe1f48ee_power
+          ac_control_switch: input_boolean.ac_lt2_middle_control_enabled
+          ac_last_command: input_datetime.ac_lt2_middle_last_command
+          ac_last_manual: input_datetime.ac_lt2_middle_last_manual
+          ac_last_applied: input_text.ac_lt2_middle_last_applied
+          ac_setting: sensor.ac_lt2_middle_recommended_setting
+          ac_min_temp: 18
+          ac_max_temp: 30
+
+  - id: ac_lt2_right_apply
+    alias: "AC floor 2 right - apply people-based setting"
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: time_pattern
+        minutes: "/1"
+      - trigger: state
+        entity_id: sensor.ac_lt2_right_recommended_setting
+      - trigger: state
+        entity_id: sensor.0x60b763fffe1e67ae_power
+      - trigger: state
+        entity_id: input_boolean.ac_lt2_right_control_enabled
+        to: "on"
+      - trigger: state
+        entity_id: input_text.ac_lt2_right_last_applied
+        to: "armed"
+    actions:
+      - action: script.ac_lt2_apply_setting
+        data:
+          ac_climate: climate.ac_lg_2_2
+          ac_power: sensor.0x60b763fffe1e67ae_power
+          ac_control_switch: input_boolean.ac_lt2_right_control_enabled
+          ac_last_command: input_datetime.ac_lt2_right_last_command
+          ac_last_manual: input_datetime.ac_lt2_right_last_manual
+          ac_last_applied: input_text.ac_lt2_right_last_applied
+          ac_setting: sensor.ac_lt2_right_recommended_setting
+          ac_min_temp: 16
+          ac_max_temp: 30
+
+  # ---- power check: only a FRESH low reading pauses a unit; a missing report only waits
+  - id: ac_lt2_check_power
+    alias: "AC floor 2 - check power after command"
+    mode: parallel
+    max: 10
+    triggers:
+      - trigger: state
+        entity_id:
+          - input_datetime.ac_lt2_left_last_command
+          - input_datetime.ac_lt2_middle_last_command
+          - input_datetime.ac_lt2_right_last_command
+    actions:
+      - variables:
+          unit: >-
+            {{ {'input_datetime.ac_lt2_left_last_command': 'left',
+                'input_datetime.ac_lt2_middle_last_command': 'middle',
+                'input_datetime.ac_lt2_right_last_command': 'right'}[trigger.entity_id] }}
+          power_sensor: >-
+            {{ {'left': 'sensor.0x60b763fffe1e451c_power',
+                'middle': 'sensor.0x60b763fffe1f48ee_power',
+                'right': 'sensor.0x60b763fffe1e67ae_power'}[unit] }}
+      - delay:
+          minutes: 15
+      - if:
+          - condition: template
+            value_template: "{{ is_state('input_boolean.ac_lt2_' ~ unit ~ '_control_enabled', 'on') }}"
+          - condition: template
+            value_template: "{{ states('input_datetime.ac_lt2_' ~ unit ~ '_last_command') not in ('unknown', 'unavailable') }}"
+          - condition: template
+            value_template: >-
+              {{ has_value(power_sensor)
+                 and (now().timestamp()
+                      - as_timestamp(states[power_sensor].last_reported, 0)) < 20 * 60
+                 and states(power_sensor) | float(0) <= 50 }}
+        then:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: "input_boolean.ac_lt2_{{ unit }}_control_enabled"
+          - action: persistent_notification.create
+            data:
+              title: "AC floor 2 {{ unit }}: automatic control paused"
+              message: >-
+                A fresh power report is below 50 W 15 minutes after an automatic
+                command. Check the physical AC before enabling control again.

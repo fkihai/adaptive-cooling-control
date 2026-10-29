@@ -1,0 +1,8 @@
+homeassistant:
+  name: Adaptive cooling test
+  latitude: -6.2
+  longitude: 106.8
+  elevation: 10
+  unit_system: metric
+  time_zone: Asia/Jakarta
+  packages: !include_dir_named packages

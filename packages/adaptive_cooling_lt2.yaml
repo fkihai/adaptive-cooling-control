@@ -1,0 +1,435 @@
+# ac-adaptive, floor 2 (Lantai 2): counting package (recommendations only).
+#
+# What it does: counts the people on floor 2 with Gemini and works out the AC level and the
+# setpoint it would choose. It never calls a climate service, so no AC is controlled.
+#
+# Install path on HA: /homeassistant/packages/adaptive_cooling_lt2.yaml
+# Needs "packages: !include_dir_named packages" in configuration.yaml (already set on this site).
+#
+# WHERE TO CHANGE THE NUMBERS: the "variables:" block of the second template block below
+# (search for "SETTINGS"): for each AC (left, middle, right) the people ranges, recommended
+# temperature and fan per level and the AC's temperature limits; plus when a count is stale. After editing the installed file: configuration check, then reload Template
+# entities. The levels and values are described in docs/implementation-guide.md.
+
+# ---------------------------------------------------------------------------
+# Helpers. Created by this package, so no manual helper creation is needed.
+# ---------------------------------------------------------------------------
+input_boolean:
+  ac_adaptive_count_enabled:
+    name: "AC LT2 Counting"
+    icon: mdi:account-group
+    # Off after install. Turning it on starts the scheduled Gemini calls (quota, camera frames).
+
+# The helpers below have no "initial:" on purpose: an initial value is applied again at every
+# HA restart and would erase the last accepted count.
+input_number:
+  ac_lt2_count_last:
+    name: "AC LT2 People (last)"
+    min: 0
+    max: 50
+    step: 1
+    mode: box
+  ac_lt2_count_prev:
+    name: "AC LT2 People (prev)"
+    min: 0
+    max: 50
+    step: 1
+    mode: box
+  ac_lt2_count_confidence:
+    name: "AC LT2 Confidence"
+    min: 0
+    max: 100
+    step: 1
+    mode: box
+
+input_datetime:
+  ac_lt2_count_time:
+    name: "AC LT2 Counted at"
+    has_date: true
+    has_time: true
+    # No initial value: it would reset on every HA restart. A fresh helper starts at 1970, which
+    # reads as "no recent count" (stale).
+
+input_text:
+  ac_lt2_count_note:
+    name: "AC LT2 Note"
+    max: 255
+
+# Working hours the feature may count and (later) control.
+schedule:
+  ac_adaptive_hours:
+    name: "AC LT2 Work hours"
+    monday: [{from: "08:00:00", to: "17:00:00"}]
+    tuesday: [{from: "08:00:00", to: "17:00:00"}]
+    wednesday: [{from: "08:00:00", to: "17:00:00"}]
+    thursday: [{from: "08:00:00", to: "17:00:00"}]
+    friday: [{from: "08:00:00", to: "17:00:00"}]
+
+# ---------------------------------------------------------------------------
+# Presence, people, level and recommendation (one level and recommendation per AC).
+# ---------------------------------------------------------------------------
+template:
+  - binary_sensor:
+      # Own presence sensor. Does not use another package's floor2_staff_present.
+      # The 15-minute hold bridges Frigate dropping a seated person; tune it during the pilot.
+      - name: "AC LT2 Occupied"
+        unique_id: ac_lt2_occupied
+        default_entity_id: binary_sensor.ac_lt2_occupied
+        device_class: occupancy
+        state: "{{ is_state('binary_sensor.2nd_floor_person_occupancy', 'on') }}"
+        delay_off:
+          minutes: 15
+
+  - variables:
+      # ---- SETTINGS: change the numbers here ------------------------------------------------
+      # One block per AC (left, middle, right). The people count is one number for the room;
+      # each AC turns it into its own level with its own ranges, and has its own temperatures,
+      # fans and temperature limits. Levels: 0 empty (no one for 15 minutes), 1 few
+      # (1 .. few_max), 2 normal (few_max+1 .. normal_max), 3 busy (more than normal_max).
+      # temperature and fan lists are in level order [empty, few, normal, busy].
+      # min_temp / max_temp are the AC's own limits; a recommendation is kept inside them.
+      # Fan names are the AC's own fan_modes. The count package only shows the recommendations.
+      ac_settings:
+        left:
+          entity_id: climate.ac_sharp_lt_2_kiri   # Sharp, 18 to 30 C
+          few_max: 2
+          normal_max: 4
+          temperature: [27, 26, 18, 18]
+          fan: [Low, Low, Medium, High]
+          min_temp: 18
+          max_temp: 30
+        middle:
+          entity_id: climate.ac_sharp_lt_2_tengah   # Sharp, 18 to 30 C (first pilot AC)
+          few_max: 2
+          normal_max: 4
+          temperature: [27, 26, 20, 18]
+          fan: [Low, Low, Medium, High]
+          min_temp: 18
+          max_temp: 30
+        right:
+          entity_id: climate.ac_lg_2_2   # LG, 16 to 30 C
+          few_max: 2
+          normal_max: 4
+          temperature: [27, 26, 20, 18]
+          fan: [Low, Low, Medium, High]
+          min_temp: 16
+          max_temp: 30
+      # A count older than this while the room is occupied is "stale"; every AC then uses
+      # stale_level (2 = normal).
+      stale_minutes: 30
+      stale_level: 2
+      # ---------------------------------------------------------------------------------------
+    binary_sensor:
+      - name: "AC LT2 Stale"
+        unique_id: ac_lt2_count_stale
+        default_entity_id: binary_sensor.ac_lt2_count_stale
+        state: >-
+          {{ is_state('binary_sensor.ac_lt2_occupied', 'on')
+             and ((now().timestamp()
+                   - (state_attr('input_datetime.ac_lt2_count_time', 'timestamp') | float(0))) / 60)
+                 > stale_minutes }}
+    sensor:
+      # Only the latest accepted answer controls the AC. "prev" is history, not
+      # another control input, so a partial update cannot publish a temporary value.
+      - name: "AC LT2 People"
+        unique_id: ac_lt2_people
+        default_entity_id: sensor.ac_lt2_people
+        unit_of_measurement: "people"
+        state_class: measurement
+        state: >-
+          {{ (states('input_number.ac_lt2_count_last') | int(0))
+             if is_state('binary_sensor.ac_lt2_occupied', 'on') else 0 }}
+        attributes:
+          last_count_age_minutes: >-
+            {{ ((now().timestamp()
+                 - (state_attr('input_datetime.ac_lt2_count_time', 'timestamp') | float(0))) / 60)
+               | round(0) }}
+
+      # ---- left AC ----
+      # Occupied with a count of 0 (the hold bridged a gap) counts as "few".
+      - name: "AC LT2 Left level"
+        unique_id: ac_lt2_left_level
+        default_entity_id: sensor.ac_lt2_left_level
+        state: >-
+          {% set c = ac_settings.left %}
+          {% set people = states('sensor.ac_lt2_people') | int(0) %}
+          {% if not is_state('binary_sensor.ac_lt2_occupied', 'on') %}
+            0
+          {% elif is_state('binary_sensor.ac_lt2_count_stale', 'on') %}
+            {{ stale_level }}
+          {% elif people <= c.few_max %}
+            1
+          {% elif people <= c.normal_max %}
+            2
+          {% else %}
+            3
+          {% endif %}
+
+      - name: "AC LT2 Left temp"
+        unique_id: ac_lt2_left_recommended_temperature
+        default_entity_id: sensor.ac_lt2_left_recommended_temperature
+        unit_of_measurement: "°C"
+        state: >-
+          {% set c = ac_settings.left %}
+          {% set level = states('sensor.ac_lt2_left_level') | int(stale_level) %}
+          {{ [[c.temperature[level], c.min_temp] | max, c.max_temp] | min }}
+        attributes:
+          level_name: >-
+            {{ ['empty', 'few', 'normal', 'busy'][states('sensor.ac_lt2_left_level') | int(stale_level)] }}
+
+      - name: "AC LT2 Left fan"
+        unique_id: ac_lt2_left_recommended_fan
+        default_entity_id: sensor.ac_lt2_left_recommended_fan
+        state: >-
+          {{ ac_settings.left.fan[states('sensor.ac_lt2_left_level') | int(stale_level)] }}
+
+      - name: "AC LT2 Left target"
+        unique_id: ac_lt2_left_recommended_setting
+        default_entity_id: sensor.ac_lt2_left_recommended_setting
+        state: >-
+          {% set c = ac_settings.left %}
+          {% set people = states('sensor.ac_lt2_people') | int(0) %}
+          {% if not is_state('binary_sensor.ac_lt2_occupied', 'on') %}
+            {% set level = 0 %}
+          {% elif is_state('binary_sensor.ac_lt2_count_stale', 'on') %}
+            {% set level = stale_level %}
+          {% elif people <= c.few_max %}
+            {% set level = 1 %}
+          {% elif people <= c.normal_max %}
+            {% set level = 2 %}
+          {% else %}
+            {% set level = 3 %}
+          {% endif %}
+          {{ [[c.temperature[level], c.min_temp] | max, c.max_temp] | min }}|{{ c.fan[level] }}
+
+      # ---- middle AC ----
+      # Occupied with a count of 0 (the hold bridged a gap) counts as "few".
+      - name: "AC LT2 Middle level"
+        unique_id: ac_lt2_middle_level
+        default_entity_id: sensor.ac_lt2_middle_level
+        state: >-
+          {% set c = ac_settings.middle %}
+          {% set people = states('sensor.ac_lt2_people') | int(0) %}
+          {% if not is_state('binary_sensor.ac_lt2_occupied', 'on') %}
+            0
+          {% elif is_state('binary_sensor.ac_lt2_count_stale', 'on') %}
+            {{ stale_level }}
+          {% elif people <= c.few_max %}
+            1
+          {% elif people <= c.normal_max %}
+            2
+          {% else %}
+            3
+          {% endif %}
+
+      - name: "AC LT2 Middle temp"
+        unique_id: ac_lt2_middle_recommended_temperature
+        default_entity_id: sensor.ac_lt2_middle_recommended_temperature
+        unit_of_measurement: "°C"
+        state: >-
+          {% set c = ac_settings.middle %}
+          {% set level = states('sensor.ac_lt2_middle_level') | int(stale_level) %}
+          {{ [[c.temperature[level], c.min_temp] | max, c.max_temp] | min }}
+        attributes:
+          level_name: >-
+            {{ ['empty', 'few', 'normal', 'busy'][states('sensor.ac_lt2_middle_level') | int(stale_level)] }}
+
+      - name: "AC LT2 Middle fan"
+        unique_id: ac_lt2_middle_recommended_fan
+        default_entity_id: sensor.ac_lt2_middle_recommended_fan
+        state: >-
+          {{ ac_settings.middle.fan[states('sensor.ac_lt2_middle_level') | int(stale_level)] }}
+
+      # One atomic temperature|fan target for control. Do not consume the two
+      # separately updated display sensors when sending an IR command.
+      - name: "AC LT2 Middle target"
+        unique_id: ac_lt2_middle_recommended_setting
+        default_entity_id: sensor.ac_lt2_middle_recommended_setting
+        state: >-
+          {% set c = ac_settings.middle %}
+          {% set people = states('sensor.ac_lt2_people') | int(0) %}
+          {% if not is_state('binary_sensor.ac_lt2_occupied', 'on') %}
+            {% set level = 0 %}
+          {% elif is_state('binary_sensor.ac_lt2_count_stale', 'on') %}
+            {% set level = stale_level %}
+          {% elif people <= c.few_max %}
+            {% set level = 1 %}
+          {% elif people <= c.normal_max %}
+            {% set level = 2 %}
+          {% else %}
+            {% set level = 3 %}
+          {% endif %}
+          {{ [[c.temperature[level], c.min_temp] | max, c.max_temp] | min }}|{{ c.fan[level] }}
+
+      # ---- right AC ----
+      # Occupied with a count of 0 (the hold bridged a gap) counts as "few".
+      - name: "AC LT2 Right level"
+        unique_id: ac_lt2_right_level
+        default_entity_id: sensor.ac_lt2_right_level
+        state: >-
+          {% set c = ac_settings.right %}
+          {% set people = states('sensor.ac_lt2_people') | int(0) %}
+          {% if not is_state('binary_sensor.ac_lt2_occupied', 'on') %}
+            0
+          {% elif is_state('binary_sensor.ac_lt2_count_stale', 'on') %}
+            {{ stale_level }}
+          {% elif people <= c.few_max %}
+            1
+          {% elif people <= c.normal_max %}
+            2
+          {% else %}
+            3
+          {% endif %}
+
+      - name: "AC LT2 Right temp"
+        unique_id: ac_lt2_right_recommended_temperature
+        default_entity_id: sensor.ac_lt2_right_recommended_temperature
+        unit_of_measurement: "°C"
+        state: >-
+          {% set c = ac_settings.right %}
+          {% set level = states('sensor.ac_lt2_right_level') | int(stale_level) %}
+          {{ [[c.temperature[level], c.min_temp] | max, c.max_temp] | min }}
+        attributes:
+          level_name: >-
+            {{ ['empty', 'few', 'normal', 'busy'][states('sensor.ac_lt2_right_level') | int(stale_level)] }}
+
+      - name: "AC LT2 Right fan"
+        unique_id: ac_lt2_right_recommended_fan
+        default_entity_id: sensor.ac_lt2_right_recommended_fan
+        state: >-
+          {{ ac_settings.right.fan[states('sensor.ac_lt2_right_level') | int(stale_level)] }}
+
+      - name: "AC LT2 Right target"
+        unique_id: ac_lt2_right_recommended_setting
+        default_entity_id: sensor.ac_lt2_right_recommended_setting
+        state: >-
+          {% set c = ac_settings.right %}
+          {% set people = states('sensor.ac_lt2_people') | int(0) %}
+          {% if not is_state('binary_sensor.ac_lt2_occupied', 'on') %}
+            {% set level = 0 %}
+          {% elif is_state('binary_sensor.ac_lt2_count_stale', 'on') %}
+            {% set level = stale_level %}
+          {% elif people <= c.few_max %}
+            {% set level = 1 %}
+          {% elif people <= c.normal_max %}
+            {% set level = 2 %}
+          {% else %}
+            {% set level = 3 %}
+          {% endif %}
+          {{ [[c.temperature[level], c.min_temp] | max, c.max_temp] | min }}|{{ c.fan[level] }}
+
+# ---------------------------------------------------------------------------
+# Gemini people count. Gated by input_boolean.ac_adaptive_count_enabled (off after install).
+# About 6 calls an hour while the floor is occupied during working hours.
+# ---------------------------------------------------------------------------
+automation:
+  - id: ac_adaptive_count_people_lt2
+    alias: "AC adaptive - count people floor 2"
+    mode: single
+    max_exceeded: silent
+    variables:
+      ai_task_entity: ai_task.google_ai_task
+      camera_entity: camera.2nd_floor
+      min_confidence: 70
+      min_gap_minutes: 4
+    triggers:
+      - trigger: time_pattern
+        minutes: "/10"
+      - trigger: state
+        entity_id: binary_sensor.ac_lt2_occupied
+        from: "off"
+        to: "on"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.ac_adaptive_count_enabled
+        state: "on"
+      - condition: state
+        entity_id: schedule.ac_adaptive_hours
+        state: "on"
+      - condition: state
+        entity_id: binary_sensor.ac_lt2_occupied
+        state: "on"
+      # Skip when a count was accepted very recently (for example the room refilled just after a scheduled run).
+      - condition: template
+        value_template: >-
+          {{ (now().timestamp()
+              - (state_attr('input_datetime.ac_lt2_count_time', 'timestamp') | float(0)))
+             > min_gap_minutes * 60 }}
+    actions:
+      - action: ai_task.generate_data
+        continue_on_error: true
+        response_variable: result
+        data:
+          entity_id: "{{ ai_task_entity }}"
+          task_name: ac_adaptive_count_lt2
+          instructions: >-
+            Count every person visible in this office camera image, including people seated at
+            desks, partly hidden by furniture or far from the camera. Do not count reflections,
+            posters or screens. Return the count, your confidence from 0 to 100, and one short
+            sentence saying where the people are.
+          structure:
+            count:
+              description: Number of people visible
+              required: true
+              selector:
+                number:
+                  min: 0
+                  max: 50
+            confidence:
+              description: Confidence from 0 to 100
+              required: true
+              selector:
+                number:
+                  min: 0
+                  max: 100
+            observation:
+              description: One short sentence about where the people are
+              required: true
+              selector:
+                text:
+          attachments:
+            - media_content_id: "media-source://camera/{{ camera_entity }}"
+              media_content_type: image/jpeg
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ result is defined
+                     and result.data is mapping
+                     and result.data.count is defined
+                     and (result.data.confidence | float(0)) >= min_confidence
+                     and not ((result.data.count | int(0)) == 0
+                               and is_state('binary_sensor.2nd_floor_person_occupancy', 'on')) }}
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.ac_lt2_count_prev
+                data:
+                  value: "{{ states('input_number.ac_lt2_count_last') | int(0) }}"
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.ac_lt2_count_confidence
+                data:
+                  value: "{{ result.data.confidence | float(0) }}"
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.ac_lt2_count_note
+                data:
+                  value: "{{ (result.data.observation | default(''))[:250] }}"
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.ac_lt2_count_last
+                data:
+                  value: "{{ [result.data.count | int(0), 50] | min }}"
+              # Commit marker last. When the old count was stale, control stays
+              # gated until the new answer has been completely published.
+              - action: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.ac_lt2_count_time
+                data:
+                  timestamp: "{{ now().timestamp() | int }}"
+        # On a failed, low-confidence or "0 people while Frigate still sees the floor occupied"
+        # answer nothing is written: the last accepted count stays, and the levels go
+        # to the safe level 2 once it is 30 minutes old. The 0 check uses Frigate's raw occupancy
+        # sensor, not the held ac_lt2_occupied. Why: on 2026-10-29 one of 6 answers said 0 with
+        # confidence 100 while 4 people were present (docs/plan-and-test.md, phase 2 results).

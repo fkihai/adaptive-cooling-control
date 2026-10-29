@@ -1,0 +1,13 @@
+# Home Assistant token and any other secret (see AGENTS.md)
+credentials/*
+!credentials/README.md
+
+# Personal permission rules
+.claude/settings.local.json
+.codex/rules/default.rules
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
