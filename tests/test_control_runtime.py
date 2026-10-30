@@ -139,7 +139,7 @@ async def test_right_control_is_separate_and_off_until_enabled(site):
 
 async def test_outside_working_hours_blocks_the_command(site):
     await site.switch(COUNT, True)
-    evening = datetime(2026, 10, 29, 17, 5, tzinfo=LOCAL)
+    evening = datetime(2026, 10, 29, 18, 5, tzinfo=LOCAL)
     await site.at(evening - timedelta(minutes=1))
     await site.set_count(4)
     await site.power()

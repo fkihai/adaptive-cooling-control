@@ -34,7 +34,7 @@ flowchart LR
 | Gemini fails or answers below 70 confidence | Nothing is written; the last accepted count stays |
 | Gemini answers 0 while Frigate's raw occupancy sensor is still `on` | Treated as a bad frame: nothing is written; the last accepted count stays. Confidence does not catch this (a 0 came back with confidence 100 on 2026-10-29) |
 | Count automation switch (`input_boolean.ac_adaptive_count_enabled`) is off | No Gemini calls at all. It is off after install |
-| Outside Mon-Fri 08:00-17:00 | No Gemini calls |
+| Outside Mon-Fri 07:00-18:00 | No Gemini calls |
 
 The people value is the **latest accepted answer**. `prev` is kept only as history. Using one value avoids the 2026-10-29 bug where a partially updated pair dipped to 2 people and sent 26 C.
 
@@ -124,11 +124,14 @@ Entities it creates (all names in English):
 
 Display names in Home Assistant use the short prefix **AC LT2**. In Activity, the
 most useful targets are **AC LT2 People** (`sensor.ac_lt2_people`), **AC LT2
-Counted at** (`input_datetime.ac_lt2_count_time`), **AC LT2 Target**
-(`input_text.ac_lt2_middle_last_applied`), **AC LT2 Sent at**
-(`input_datetime.ac_lt2_middle_last_command`), **AC LT2 Manual at**
-(`input_datetime.ac_lt2_middle_last_manual`) and **AC LT2 Control**
-(`input_boolean.ac_lt2_middle_control_enabled`). The entity IDs and automation
+Counted at** (`input_datetime.ac_lt2_count_time`), **AC LT2 Middle sent**
+(`input_text.ac_lt2_middle_last_applied`), **AC LT2 Middle sent at**
+(`input_datetime.ac_lt2_middle_last_command`), **AC LT2 Middle manual at**
+(`input_datetime.ac_lt2_middle_last_manual`) and **AC LT2 Middle control**
+(`input_boolean.ac_lt2_middle_control_enabled`). Left and right follow the same
+pattern. Two kinds of "target" exist: **AC LT2 `<Position>` target** is the
+recommendation (a template sensor), and **AC LT2 `<Position>` sent** is the setting the
+automation last sent to that AC (an `input_text`). The entity IDs and automation
 aliases do not change when these display names change.
 
 Notes:
@@ -165,13 +168,13 @@ After the install every switch is off: `input_boolean.ac_adaptive_count_enabled`
 
 Finish the offline checks first. The control package creates `input_boolean.ac_lt2_middle_control_enabled` (plus `..._left_...` and `..._right_...`), **off** on a fresh install and restored to its last state after a restart because there is no `initial:`. Installation does not send AC commands. Enabling it (and enabling `input_boolean.ac_adaptive_count_enabled`, a separately approved step that sends staff frames to Google) starts the live pilot only after a recent accepted count. Ask for explicit approval before the first command to this named AC; confirm the result with the user beside the physical unit. All other ACs only show recommendations.
 
-Each unit is handled by its own thin automation (`ac_lt2_left_apply`, `ac_lt2_middle_apply`, `ac_lt2_right_apply`) that calls the shared script with that unit's climate entity, power sensor, switch and helpers. The middle automation is described below; the other two differ only in entity, power sensor and temperature range (left Sharp 18-30, right LG 16-30). It requires Mon-Fri 08:00-17:00 WIB, an occupied room, a count no older than 30 minutes, climate mode `cool`, and a power report (`last_reported`) less than 20 minutes old. A late report holds new commands instead of switching control off. It checks the Sharp fan mode and 18-30 C range, limits attempts to one per 10 minutes, and waits 30 minutes after a HA user changes the unit through the UI. A direct HA user change detected by its context **turns the control switch off** and clears the last automatic setting; re-enable it deliberately after the 30-minute pause. It never calls `climate.set_hvac_mode` or turns an AC on/off. The last **attempted** automatic setting is recorded in `input_text.ac_lt2_middle_last_applied` before sending IR; if the recommendation is unchanged, no new command is sent even after a service failure. Re-enabling the control switch clears that setting and allows a new attempt after the time gates. A physical IR remote is invisible to HA and cannot pause the automation; turn off the control switch manually after using one.
+Each unit is handled by its own thin automation (`ac_lt2_left_apply`, `ac_lt2_middle_apply`, `ac_lt2_right_apply`) that calls the shared script with that unit's climate entity, power sensor, switch and helpers. The middle automation is described below; the other two differ only in entity, power sensor and temperature range (left Sharp 18-30, right LG 16-30). It requires Mon-Fri 07:00-18:00 WIB, an occupied room, a count no older than 30 minutes, climate mode `cool`, and a power report (`last_reported`) less than 20 minutes old. A late report holds new commands instead of switching control off. It checks the Sharp fan mode and 18-30 C range, limits attempts to one per 10 minutes, and waits 30 minutes after a HA user changes the unit through the UI. A direct HA user change detected by its context **turns the control switch off** and clears the last automatic setting; re-enable it deliberately after the 30-minute pause. It never calls `climate.set_hvac_mode` or turns an AC on/off. The last **attempted** automatic setting is recorded in `input_text.ac_lt2_middle_last_applied` before sending IR; if the recommendation is unchanged, no new command is sent even after a service failure. Re-enabling the control switch clears that setting and allows a new attempt after the time gates. A physical IR remote is invisible to HA and cannot pause the automation; turn off the control switch manually after using one.
 
 Temperature and fan are sent as two service calls. Broadlink IR cannot report actual temperature or fan, so the stored setting is a record of what HA attempted, not verification. After 15 minutes, if a **fresh** report shows at most 50 W, the control switch turns off and a persistent notification is created. A missing report never turns control off; it only holds new commands until a report arrives (checked every minute). The power sensor reports about every 10 minutes and can verify only on/off; it cannot prove either command reached the AC. The automation never retries an IR command automatically.
 
 No command is issued when the control switch is off, the count switch is off, the room is empty, the count is stale, the power reading is missing/old, the climate mode is not `cool`, the recommendation is out of range, the previous attempt was within 10 minutes, or a detected HA manual change was within 30 minutes. To roll back, turn off the control switch first; remove the control package and reload its helpers and automations only after approval. The counting package is separate.
 
-While the room is empty, and outside Mon-Fri 08:00-17:00, the count package still shows level 0 or 2 but the control package issues no command ("room occupied" and the work-hours schedule are required). The AC therefore keeps whatever setting it had. Cooling an empty room is not the goal; turning a unit down by guessing is the risk the pilot avoids.
+While the room is empty, and outside Mon-Fri 07:00-18:00, the count package still shows level 0 or 2 but the control package issues no command ("room occupied" and the work-hours schedule are required). The AC therefore keeps whatever setting it had. Cooling an empty room is not the goal; turning a unit down by guessing is the risk the pilot avoids.
 
 The ACs are controlled by Broadlink IR, which is one-way. Home Assistant cannot see a change made with the physical remote except its on/off power draw. During the pilot, compare the recommended setting with the physical unit and staff comfort, not just the dashboard state.
 
@@ -196,7 +199,7 @@ Three built-in views, no extra entity needed. Use the display names (the `AC LT2
 | `AC LT2 - apply setting to one AC` | the shared script, i.e. every attempt including the ones a guard stopped |
 | `AC floor 2 - arm the three units`, `... - record HA manual change`, `... - check power after command` | re-arming, manual pauses, the 15-minute power check |
 
-**History** (Settings > History). Add `AC LT2 People`, `AC LT2 Confidence`, `AC LT2 Note`, `AC LT2 People (last)`, `AC LT2 People (prev)`, the three target entities (`AC LT2 Left target`, `AC LT2 Middle target`, `AC LT2 Right target`), the three `... Sent at` and `... Manual at` timestamps, and the three `climate` entities.
+**History** (Settings > History). Add `AC LT2 People`, `AC LT2 Confidence`, `AC LT2 Note`, `AC LT2 People (last)`, `AC LT2 People (prev)`, the three recommendation entities (`AC LT2 Left target`, `AC LT2 Middle target`, `AC LT2 Right target`), the three sent settings (`AC LT2 Left sent`, `AC LT2 Middle sent`, `AC LT2 Right sent`), the three `... sent at` and `... manual at` timestamps, and the three `climate` entities.
 
 **Traces** (Settings > Automations > pick one > the three-dot menu > Traces). This is the only UI view that shows *why* nothing was sent: every guard is listed with its result, so it shows the first failing condition (switch off, outside hours, not occupied, stale count, plug off, power report older than 20 minutes, not cooling, out of range, 10-minute cooldown, 30-minute manual pause, target already applied). Only the last 5 runs are kept and they are lost on restart.
 
@@ -205,7 +208,7 @@ Two things that look like faults but are not:
 * **No new Logbook entry does not mean the count stopped.** Logbook records changes only; a second answer of the same number writes nothing. Check `AC LT2 Counted at` instead.
 * **`AC LT2 - apply setting to one AC` runs about three times a minute**, one per unit, because each apply automation rechecks every minute (`time_pattern: /1`). The script stops at the first failing guard; no IR is sent.
 
-Known ambiguity: `AC LT2 Left target` and `AC LT2 Right target` are the display names of two entities each (the recommendation sensor and the `input_text` recording what was sent). Until they are renamed, tell them apart by entity ID or by which value changes at send time. `AC LT2 Target` (middle, sent) has no such clash.
+Naming: `AC LT2 <Position> target` is the recommendation and `AC LT2 <Position> sent` is what was last sent to the AC, so no two entities share a display name (renamed 2026-10-30; before that `AC LT2 Left target` and `AC LT2 Right target` named two entities each, and the middle ones had no "Middle" in the name). In Activity, a `target` change "By automation: AC adaptive - count people floor 2" is a new recommendation; a `sent` change "By automation: AC floor 2 ... - apply people-based setting" is a command attempt.
 
 ## Privacy
 

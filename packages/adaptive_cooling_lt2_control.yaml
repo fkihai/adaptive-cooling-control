@@ -7,7 +7,7 @@ input_boolean:
   ac_lt2_left_control_enabled:
     name: "AC LT2 Left control"  # new unit: stays off until its plug reports again
   ac_lt2_middle_control_enabled:
-    name: "AC LT2 Control"
+    name: "AC LT2 Middle control"
   ac_lt2_right_control_enabled:
     name: "AC LT2 Right control"
 
@@ -21,11 +21,11 @@ input_datetime:
     has_date: true
     has_time: true
   ac_lt2_middle_last_command:
-    name: "AC LT2 Sent at"
+    name: "AC LT2 Middle sent at"
     has_date: true
     has_time: true
   ac_lt2_middle_last_manual:
-    name: "AC LT2 Manual at"
+    name: "AC LT2 Middle manual at"
     has_date: true
     has_time: true
   ac_lt2_right_last_command:
@@ -39,13 +39,13 @@ input_datetime:
 
 input_text:
   ac_lt2_left_last_applied:
-    name: "AC LT2 Left target"
+    name: "AC LT2 Left sent"
     max: 100
   ac_lt2_middle_last_applied:
-    name: "AC LT2 Target"
+    name: "AC LT2 Middle sent"
     max: 100
   ac_lt2_right_last_applied:
-    name: "AC LT2 Right target"
+    name: "AC LT2 Right sent"
     max: 100
 
 script:

@@ -161,7 +161,7 @@ Edit `packages/adaptive_cooling_lt2.yaml` and the matching part of `implementati
 | Answer with confidence below 70 | Not written |
 | Count older than 30 minutes while occupied | Level 2 and `stale` true |
 | Switch `ac_adaptive_count_enabled` off | No AI Task call |
-| Outside Mon-Fri 08:00-17:00 | No AI Task call |
+| Outside Mon-Fri 07:00-18:00 | No AI Task call |
 | Two triggers within 4 minutes | Only one call |
 | Count above 50 | Clamped to 50 |
 | Level to recommended temperature and fan mapping | Matches the table in the guide |

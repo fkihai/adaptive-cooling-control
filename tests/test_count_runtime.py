@@ -186,8 +186,8 @@ async def test_level_mapping_for_every_ac(site, people, level, left_temp, other_
 
 
 @pytest.mark.parametrize("when, label", [
-    (datetime(2026, 10, 29, 17, 10, tzinfo=LOCAL), "after 17:00 on a weekday"),
-    (datetime(2026, 10, 30, 7, 50, tzinfo=LOCAL), "before 08:00 on a weekday"),
+    (datetime(2026, 10, 29, 18, 10, tzinfo=LOCAL), "after 18:00 on a weekday"),
+    (datetime(2026, 10, 30, 6, 50, tzinfo=LOCAL), "before 07:00 on a weekday"),
     (datetime(2026, 10, 31, 10, 10, tzinfo=LOCAL), "Saturday"),
 ])
 async def test_outside_working_hours_no_gemini_call(site, when, label):

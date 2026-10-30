@@ -174,7 +174,8 @@ async def site(hass: HomeAssistant, freezer, tmp_path):
 
     config = await conf_util.async_hass_config_yaml(hass)
     for domain in ("input_boolean", "input_number", "input_datetime", "input_text",
-                   "schedule", "template", "persistent_notification", "automation"):
+                   "schedule", "template", "persistent_notification", "script",
+                   "automation"):
         assert await async_setup_component(hass, domain, config), domain
     hass.services.async_register("persistent_notification", "create", fake_notification)
     s = Site(hass, freezer, ai, calls, flags, notifications)
