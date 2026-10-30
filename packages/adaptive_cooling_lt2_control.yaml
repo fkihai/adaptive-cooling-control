@@ -90,7 +90,7 @@ template:
           {% set t = state_attr(u.climate, 'temperature') | int(0) %}
           {% set f = state_attr(u.climate, 'fan_mode') %}
           {% set now_ts = now().timestamp() %}
-          {% set manual_until = (state_attr(u.last_manual, 'timestamp') | float(0)) + 30 * 60 %}
+          {% set manual_until = (state_attr(u.last_manual, 'timestamp') | float(0)) + 60 * 60 %}
           {% set last_cmd = (state_attr(u.last_command, 'timestamp') | float(0)) %}
           {% if is_state(u.climate, 'off') %}
             AC mati, tidak diatur otomasi
@@ -132,7 +132,7 @@ template:
           {% set t = state_attr(u.climate, 'temperature') | int(0) %}
           {% set f = state_attr(u.climate, 'fan_mode') %}
           {% set now_ts = now().timestamp() %}
-          {% set manual_until = (state_attr(u.last_manual, 'timestamp') | float(0)) + 30 * 60 %}
+          {% set manual_until = (state_attr(u.last_manual, 'timestamp') | float(0)) + 60 * 60 %}
           {% set last_cmd = (state_attr(u.last_command, 'timestamp') | float(0)) %}
           {% if is_state(u.climate, 'off') %}
             AC mati, tidak diatur otomasi
@@ -174,7 +174,7 @@ template:
           {% set t = state_attr(u.climate, 'temperature') | int(0) %}
           {% set f = state_attr(u.climate, 'fan_mode') %}
           {% set now_ts = now().timestamp() %}
-          {% set manual_until = (state_attr(u.last_manual, 'timestamp') | float(0)) + 30 * 60 %}
+          {% set manual_until = (state_attr(u.last_manual, 'timestamp') | float(0)) + 60 * 60 %}
           {% set last_cmd = (state_attr(u.last_command, 'timestamp') | float(0)) %}
           {% if is_state(u.climate, 'off') %}
             AC mati, tidak diatur otomasi
@@ -369,7 +369,7 @@ script:
       - condition: template
         value_template: >-
           {{ now().timestamp()
-             - (state_attr(ac_last_manual, 'timestamp') | float(0)) >= 30 * 60 }}
+             - (state_attr(ac_last_manual, 'timestamp') | float(0)) >= 60 * 60 }}
       - condition: template
         value_template: "{{ states(ac_last_applied) != target_setting }}"
       - action: input_datetime.set_datetime
@@ -477,6 +477,57 @@ automation:
           entity_id: "input_text.ac_lt2_{{ unit }}_last_applied"
         data:
           value: "manual change"
+
+  # ---- manual resume: a manual pause is temporary; turn the unit back on after 60 minutes,
+  #      and only inside work hours. The marker "manual change" is written only by the pause
+  #      above, so a power-check or a deliberately switched-off unit is never resumed here.
+  - id: ac_lt2_manual_resume
+    alias: "AC floor 2 - resume control 60 minutes after a manual change"
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: "/1"
+    conditions:
+      - condition: state
+        entity_id: schedule.ac_adaptive_hours
+        state: "on"
+    actions:
+      - if:
+          - condition: template
+            value_template: >-
+              {{ is_state('input_boolean.ac_lt2_left_control_enabled', 'off')
+                 and is_state('input_text.ac_lt2_left_last_applied', 'manual change')
+                 and now().timestamp()
+                     - (state_attr('input_datetime.ac_lt2_left_last_manual', 'timestamp') | float(0))
+                     >= 60 * 60 }}
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.ac_lt2_left_control_enabled
+      - if:
+          - condition: template
+            value_template: >-
+              {{ is_state('input_boolean.ac_lt2_middle_control_enabled', 'off')
+                 and is_state('input_text.ac_lt2_middle_last_applied', 'manual change')
+                 and now().timestamp()
+                     - (state_attr('input_datetime.ac_lt2_middle_last_manual', 'timestamp') | float(0))
+                     >= 60 * 60 }}
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.ac_lt2_middle_control_enabled
+      - if:
+          - condition: template
+            value_template: >-
+              {{ is_state('input_boolean.ac_lt2_right_control_enabled', 'off')
+                 and is_state('input_text.ac_lt2_right_last_applied', 'manual change')
+                 and now().timestamp()
+                     - (state_attr('input_datetime.ac_lt2_right_last_manual', 'timestamp') | float(0))
+                     >= 60 * 60 }}
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.ac_lt2_right_control_enabled
 
   # ---- apply: one thin automation per unit; the logic lives in the script
   - id: ac_lt2_left_apply

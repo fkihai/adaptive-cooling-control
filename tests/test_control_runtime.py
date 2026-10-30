@@ -197,17 +197,61 @@ async def test_user_change_in_ha_pauses_and_switches_control_off(site):
     assert site.state(f"input_boolean.{CONTROL}") == "off"
     assert site.state(APPLIED) == "manual change"
     assert site.state("input_datetime.ac_lt2_middle_last_manual") != "1970-01-01 00:00:00"
-    # Even if someone switches control back on, nothing is sent for 30 minutes.
+    # Even if someone switches control back on, nothing is sent for 60 minutes.
     await site.set_count(8)
     await site.switch(CONTROL, True)
-    for _ in range(2):
-        await site.tick(minutes=10)
-    assert len(site.calls) == 2
-    # 30 minutes after the manual change the pause is over.
-    await site.tick(minutes=10)
+    await site.after(minutes=48)  # 10:59
     await site.set_count(8)
+    await site.tick(minutes=10)  # 11:09, 58 minutes after the manual change
+    assert len(site.calls) == 2
+    await site.tick(minutes=1)  # 11:10, 59 minutes
+    assert len(site.calls) == 2
+    await site.tick(minutes=1)  # 11:11, 60 minutes
     assert site.state(APPLIED) == "18|High"
     assert len(site.calls) == 4
+
+
+async def test_control_resumes_60_minutes_after_a_manual_change(site):
+    await live(site)  # 10:10, sends 20|Medium
+    assert len(site.calls) == 2
+    await site.after(minutes=1)
+    await site.manual_change(25, fan="High")  # 10:11
+    assert site.state(f"input_boolean.{CONTROL}") == "off"
+    await site.after(minutes=47)  # 10:58
+    await site.set_count(8)  # 18|High, still fresh 13 minutes later
+    await site.tick(minutes=10)  # 11:08, 57 minutes
+    assert site.state(f"input_boolean.{CONTROL}") == "off"
+    await site.tick(minutes=1)  # 11:09, 58 minutes
+    assert site.state(f"input_boolean.{CONTROL}") == "off"
+    await site.tick(minutes=1)  # 11:10, 59 minutes
+    assert site.state(f"input_boolean.{CONTROL}") == "off"
+    await site.tick(minutes=1)  # 11:11, 60 minutes: the resume automation arms it
+    assert site.state(f"input_boolean.{CONTROL}") == "on"
+    assert site.state(APPLIED) == "18|High"
+    assert len(site.calls) == 4
+
+
+async def test_manual_resume_does_not_run_outside_work_hours(site):
+    saturday = datetime(2026, 10, 31, 10, 0, tzinfo=LOCAL)
+    await site.at(saturday)
+    await site.manual_change(25, fan="High")
+    assert site.state(f"input_boolean.{CONTROL}") == "off"
+    await site.tick(minutes=60)
+    assert site.state("schedule.ac_adaptive_hours") == "off"
+    assert site.state(f"input_boolean.{CONTROL}") == "off"
+    assert site.calls == []
+
+
+async def test_power_check_pause_is_not_auto_resumed(site):
+    await live(site)
+    await site.after(minutes=7)
+    await site.power(5)
+    await site.after(minutes=8)  # 10:25, power check turns control off
+    assert site.state(f"input_boolean.{CONTROL}") == "off"
+    assert site.state(APPLIED) == "20|Medium"  # not "manual change"
+    await site.tick(minutes=60)  # a fresh report much later must not re-enable it
+    assert site.state(f"input_boolean.{CONTROL}") == "off"
+    assert len(site.calls) == 2
 
 
 async def test_change_without_a_user_does_not_pause(site):

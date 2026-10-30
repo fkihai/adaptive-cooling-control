@@ -1,8 +1,10 @@
-# Status (last updated 2026-10-30, chart time axis fixed)
+# Status (last updated 2026-10-30, manual pause auto-resumes after 60 minutes)
 
 Update this file at the end of every session in which something changed. Keep it short. The phase list and test plan are in [plan-and-test.md](plan-and-test.md); keep its Progress table in step with this file.
 
 ## Where we are
+
+* **Manual pause auto-resumes after 60 minutes, inside work hours; live 2026-10-30 14:56 WIB.** The control package now uses 60 minutes (was 30) for the manual-pause guard and the three status texts, and adds `ac_lt2_manual_resume`: a per-minute automation that turns a unit's control switch back on only when `last_applied` is `manual change` and `schedule.ac_adaptive_hours` is on. Power-check and deliberate switch-offs are never resumed. Backup `/homeassistant/_backup_20261030_pre_manual_resume`; uploaded hash `2a864188...` matches; `ha core check` passed; reloaded `template`, `script` and `automation` only. 118 offline tests pass and `python run.py check` passes. Effect at 14:56: LG Kanan (off since 09:52:54 after a 20 -> 19 C manual change) was resumed automatically, `input_text.ac_lt2_right_last_applied` = `20|Medium`, `last_command` = 14:56:00, status `ok`. Middle stayed on with its 14:31 command; left stayed off (`last_applied` unknown). No other AC was commanded. **The user should confirm the LG unit physically.** Docs updated in the same edit.
 
 * **Chart time axis was still empty; fixed 2026-10-30.** The previous attempt styled the axis but showed no labels: the JavaScript formatter returned a value only when the tick's minutes were 0, while ApexCharts placed ticks at times such as 11:20, so every label rendered empty. The people chart now uses ApexCharts' native datetime label format `HH:mm` (24-hour, no date) with no custom formatter; the 12 px label style and extra bottom padding stay. 114 tests pass and `tools/push_dashboard.py --confirm` saved it; read-back confirms `format: HH:mm`, no `formatter` key, and no read-only problems. Only this project's dashboard changed; no package, reload, camera or climate call.
 

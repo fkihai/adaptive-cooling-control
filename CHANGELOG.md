@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `ac_lt2_manual_resume` turns a unit's control switch back on after a manual
+  Home Assistant change, inside work hours only. Power-check and deliberate
+  switch-offs are not resumed.
+
+### Changed
+
+- Manual pause is now 60 minutes (was 30) in the apply guard and the status
+  texts.
+
 ## [1.0.0] - 2026-10-30
 
 First tagged release of the floor 2 pilot.

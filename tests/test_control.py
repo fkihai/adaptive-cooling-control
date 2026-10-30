@@ -65,7 +65,7 @@ class ControlTests(unittest.TestCase):
         text = str(SCRIPT)
         for needle in ("input_boolean.ac_adaptive_count_enabled", "schedule.ac_adaptive_hours",
                        "binary_sensor.ac_lt2_occupied", "binary_sensor.ac_lt2_count_stale",
-                       "last_reported", "20 * 60", "10 * 60", "30 * 60", "ac_min_temp", "fan_modes",
+                       "last_reported", "20 * 60", "10 * 60", "60 * 60", "ac_min_temp", "fan_modes",
                        "ac_last_applied"):
             self.assertIn(needle, text)
 
@@ -78,6 +78,22 @@ class ControlTests(unittest.TestCase):
         self.assertIn("input_boolean.turn_off", actions)
         self.assertIn("ac_lt2_{{ unit }}_control_enabled", actions)
         self.assertNotIn("climate.set", actions)
+
+    def test_manual_resume_is_work_hours_only_and_turns_switches_on(self):
+        resume = AUTOMATIONS["ac_lt2_manual_resume"]
+        self.assertEqual(resume["triggers"][0]["trigger"], "time_pattern")
+        self.assertEqual(resume["triggers"][0]["minutes"], "/1")
+        self.assertEqual(resume["conditions"][0]["entity_id"], "schedule.ac_adaptive_hours")
+        self.assertEqual(resume["conditions"][0]["state"], "on")
+        text = str(resume["actions"])
+        self.assertIn("input_boolean.turn_on", text)
+        self.assertNotIn("climate.", text)
+        self.assertIn("manual change", text)
+        self.assertIn("60 * 60", text)
+        for unit in UNITS:
+            self.assertIn(f"input_boolean.ac_lt2_{unit}_control_enabled", text)
+            self.assertIn(f"input_text.ac_lt2_{unit}_last_applied", text)
+            self.assertIn(f"input_datetime.ac_lt2_{unit}_last_manual", text)
 
     def test_arming_and_power_check_send_no_ir(self):
         for key in ("ac_lt2_arm", "ac_lt2_check_power"):
