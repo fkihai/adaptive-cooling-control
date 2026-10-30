@@ -48,6 +48,260 @@ input_text:
     name: "AC LT2 Right sent"
     max: 100
 
+# Short status line for the dashboard. The state is "ok" while the unit matches the target; otherwise one
+# plain sentence says what it is waiting for. The checks follow the guards in script.ac_lt2_apply_setting.
+template:
+  - variables:
+      # Entities of each unit, used only by the status sensors below.
+      units:
+        left:
+          climate: climate.ac_sharp_lt_2_kiri
+          power: sensor.0x60b763fffe1e451c_power
+          switch: input_boolean.ac_lt2_left_control_enabled
+          last_command: input_datetime.ac_lt2_left_last_command
+          last_manual: input_datetime.ac_lt2_left_last_manual
+          last_applied: input_text.ac_lt2_left_last_applied
+          setting: sensor.ac_lt2_left_recommended_setting
+        middle:
+          climate: climate.ac_sharp_lt_2_tengah
+          power: sensor.0x60b763fffe1f48ee_power
+          switch: input_boolean.ac_lt2_middle_control_enabled
+          last_command: input_datetime.ac_lt2_middle_last_command
+          last_manual: input_datetime.ac_lt2_middle_last_manual
+          last_applied: input_text.ac_lt2_middle_last_applied
+          setting: sensor.ac_lt2_middle_recommended_setting
+        right:
+          climate: climate.ac_lg_2_2
+          power: sensor.0x60b763fffe1e67ae_power
+          switch: input_boolean.ac_lt2_right_control_enabled
+          last_command: input_datetime.ac_lt2_right_last_command
+          last_manual: input_datetime.ac_lt2_right_last_manual
+          last_applied: input_text.ac_lt2_right_last_applied
+          setting: sensor.ac_lt2_right_recommended_setting
+    sensor:
+      - name: "AC LT2 Left status"
+        unique_id: ac_lt2_left_status
+        default_entity_id: sensor.ac_lt2_left_status
+        state: >-
+          {% set u = units.left %}
+          {% set rec = states(u.setting) %}
+          {% set rt = rec.split('|')[0] | int(0) %}
+          {% set rf = rec.split('|')[1] if '|' in rec else '' %}
+          {% set t = state_attr(u.climate, 'temperature') | int(0) %}
+          {% set f = state_attr(u.climate, 'fan_mode') %}
+          {% set now_ts = now().timestamp() %}
+          {% set manual_until = (state_attr(u.last_manual, 'timestamp') | float(0)) + 30 * 60 %}
+          {% set last_cmd = (state_attr(u.last_command, 'timestamp') | float(0)) %}
+          {% if is_state(u.climate, 'off') %}
+            AC mati, tidak diatur otomasi
+          {% elif not is_state(u.climate, 'cool') %}
+            Mode bukan Cool, tidak diatur otomasi
+          {% elif rt == 0 or (rt == t and rf == f) %}
+            ok
+          {% elif now_ts < manual_until %}
+            Dijeda manual s/d {{ manual_until | timestamp_custom('%H:%M') }}
+          {% elif not is_state(u.switch, 'on') %}
+            Otomasi mati · saran {{ rt }} °C · {{ rf }}
+          {% elif not is_state('schedule.ac_adaptive_hours', 'on') %}
+            Di luar jam kerja
+          {% elif not is_state('input_boolean.ac_adaptive_count_enabled', 'on') %}
+            Hitung orang mati
+          {% elif not is_state('binary_sensor.ac_lt2_occupied', 'on')
+                  or is_state('binary_sensor.ac_lt2_count_stale', 'on') %}
+            Menunggu hitungan orang
+          {% elif not (has_value(u.power)
+                       and states(u.power) | float(0) > 50
+                       and (now_ts - as_timestamp(states[u.power].last_reported, 0)) < 20 * 60) %}
+            Menunggu data daya AC
+          {% elif now_ts - last_cmd < 10 * 60 %}
+            Akan ke {{ rt }} °C · {{ rf }} (± {{ ((last_cmd + 600 - now_ts) / 60) | round(0) | int }} mnt)
+          {% elif states(u.last_applied) == rec %}
+            Terkirim, belum sesuai
+          {% else %}
+            Akan ke {{ rt }} °C · {{ rf }}
+          {% endif %}
+
+      - name: "AC LT2 Middle status"
+        unique_id: ac_lt2_middle_status
+        default_entity_id: sensor.ac_lt2_middle_status
+        state: >-
+          {% set u = units.middle %}
+          {% set rec = states(u.setting) %}
+          {% set rt = rec.split('|')[0] | int(0) %}
+          {% set rf = rec.split('|')[1] if '|' in rec else '' %}
+          {% set t = state_attr(u.climate, 'temperature') | int(0) %}
+          {% set f = state_attr(u.climate, 'fan_mode') %}
+          {% set now_ts = now().timestamp() %}
+          {% set manual_until = (state_attr(u.last_manual, 'timestamp') | float(0)) + 30 * 60 %}
+          {% set last_cmd = (state_attr(u.last_command, 'timestamp') | float(0)) %}
+          {% if is_state(u.climate, 'off') %}
+            AC mati, tidak diatur otomasi
+          {% elif not is_state(u.climate, 'cool') %}
+            Mode bukan Cool, tidak diatur otomasi
+          {% elif rt == 0 or (rt == t and rf == f) %}
+            ok
+          {% elif now_ts < manual_until %}
+            Dijeda manual s/d {{ manual_until | timestamp_custom('%H:%M') }}
+          {% elif not is_state(u.switch, 'on') %}
+            Otomasi mati · saran {{ rt }} °C · {{ rf }}
+          {% elif not is_state('schedule.ac_adaptive_hours', 'on') %}
+            Di luar jam kerja
+          {% elif not is_state('input_boolean.ac_adaptive_count_enabled', 'on') %}
+            Hitung orang mati
+          {% elif not is_state('binary_sensor.ac_lt2_occupied', 'on')
+                  or is_state('binary_sensor.ac_lt2_count_stale', 'on') %}
+            Menunggu hitungan orang
+          {% elif not (has_value(u.power)
+                       and states(u.power) | float(0) > 50
+                       and (now_ts - as_timestamp(states[u.power].last_reported, 0)) < 20 * 60) %}
+            Menunggu data daya AC
+          {% elif now_ts - last_cmd < 10 * 60 %}
+            Akan ke {{ rt }} °C · {{ rf }} (± {{ ((last_cmd + 600 - now_ts) / 60) | round(0) | int }} mnt)
+          {% elif states(u.last_applied) == rec %}
+            Terkirim, belum sesuai
+          {% else %}
+            Akan ke {{ rt }} °C · {{ rf }}
+          {% endif %}
+
+      - name: "AC LT2 Right status"
+        unique_id: ac_lt2_right_status
+        default_entity_id: sensor.ac_lt2_right_status
+        state: >-
+          {% set u = units.right %}
+          {% set rec = states(u.setting) %}
+          {% set rt = rec.split('|')[0] | int(0) %}
+          {% set rf = rec.split('|')[1] if '|' in rec else '' %}
+          {% set t = state_attr(u.climate, 'temperature') | int(0) %}
+          {% set f = state_attr(u.climate, 'fan_mode') %}
+          {% set now_ts = now().timestamp() %}
+          {% set manual_until = (state_attr(u.last_manual, 'timestamp') | float(0)) + 30 * 60 %}
+          {% set last_cmd = (state_attr(u.last_command, 'timestamp') | float(0)) %}
+          {% if is_state(u.climate, 'off') %}
+            AC mati, tidak diatur otomasi
+          {% elif not is_state(u.climate, 'cool') %}
+            Mode bukan Cool, tidak diatur otomasi
+          {% elif rt == 0 or (rt == t and rf == f) %}
+            ok
+          {% elif now_ts < manual_until %}
+            Dijeda manual s/d {{ manual_until | timestamp_custom('%H:%M') }}
+          {% elif not is_state(u.switch, 'on') %}
+            Otomasi mati · saran {{ rt }} °C · {{ rf }}
+          {% elif not is_state('schedule.ac_adaptive_hours', 'on') %}
+            Di luar jam kerja
+          {% elif not is_state('input_boolean.ac_adaptive_count_enabled', 'on') %}
+            Hitung orang mati
+          {% elif not is_state('binary_sensor.ac_lt2_occupied', 'on')
+                  or is_state('binary_sensor.ac_lt2_count_stale', 'on') %}
+            Menunggu hitungan orang
+          {% elif not (has_value(u.power)
+                       and states(u.power) | float(0) > 50
+                       and (now_ts - as_timestamp(states[u.power].last_reported, 0)) < 20 * 60) %}
+            Menunggu data daya AC
+          {% elif now_ts - last_cmd < 10 * 60 %}
+            Akan ke {{ rt }} °C · {{ rf }} (± {{ ((last_cmd + 600 - now_ts) / 60) | round(0) | int }} mnt)
+          {% elif states(u.last_applied) == rec %}
+            Terkirim, belum sesuai
+          {% else %}
+            Akan ke {{ rt }} °C · {{ rf }}
+          {% endif %}
+
+
+  # Activity log for the dashboard. A trigger-based sensor keeps its attributes across restarts,
+  # so the dashboard can show the last events and a 7-day summary without extra helpers. It only
+  # records; it never calls a service. State = settings sent today (all units).
+  - triggers:
+      - trigger: state
+        entity_id:
+          - input_text.ac_lt2_left_last_applied
+          - input_text.ac_lt2_middle_last_applied
+          - input_text.ac_lt2_right_last_applied
+        id: applied
+      - trigger: state
+        entity_id:
+          - input_boolean.ac_lt2_left_control_enabled
+          - input_boolean.ac_lt2_middle_control_enabled
+          - input_boolean.ac_lt2_right_control_enabled
+        id: control
+      - trigger: state
+        entity_id: sensor.ac_lt2_people
+        id: people
+    variables:
+      day: "{{ now().strftime('%Y-%m-%d') }}"
+      cutoff: "{{ (now() - timedelta(days=6)).strftime('%Y-%m-%d') }}"
+      unit: "{{ trigger.entity_id.split('.')[1].split('_')[2] }}"
+      new_state: "{{ trigger.to_state.state if trigger.to_state is not none else '' }}"
+      old_state: "{{ trigger.from_state.state if trigger.from_state is not none else '' }}"
+      kind: >-
+        {% if trigger.id == 'applied' and '|' in new_state and new_state != old_state %}sent
+        {%- elif trigger.id == 'applied' and new_state == 'manual change' and old_state != new_state %}manual
+        {%- elif trigger.id == 'control' and new_state in ['on', 'off'] and old_state in ['on', 'off'] %}control
+        {%- else %}none{% endif %}
+      old_events: "{{ state_attr('sensor.ac_lt2_activity', 'events') or [] }}"
+      old_sent: "{{ state_attr('sensor.ac_lt2_activity', 'sent_by_day') or {} }}"
+      old_peak: "{{ state_attr('sensor.ac_lt2_activity', 'people_peak_by_day') or {} }}"
+    sensor:
+      - name: "AC LT2 Activity"
+        unique_id: ac_lt2_activity
+        default_entity_id: sensor.ac_lt2_activity
+        state: >-
+          {% set cur = old_sent.get(day, {}) %}
+          {% set extra = 1 if kind == 'sent' else 0 %}
+          {{ (cur.values() | map('int', 0) | sum) + extra }}
+        attributes:
+          events: >-
+            {% if kind == 'none' %}
+              {{ old_events }}
+            {% else %}
+              {% set e = {'unit': unit, 'kind': kind, 'value': new_state,
+                          'ts': now().timestamp() | int, 'time': now().strftime('%H:%M:%S'), 'day': day} %}
+              {{ ([e] + old_events)[:8] }}
+            {% endif %}
+          sent_by_day: >-
+            {% set ns = namespace(r={}) %}
+            {% set cur = old_sent.get(day, {}) %}
+            {% if kind == 'sent' %}
+              {% set cur = cur | combine({unit: (cur.get(unit, 0) | int(0)) + 1}) %}
+            {% endif %}
+            {% set merged = old_sent | combine({day: cur}) %}
+            {% for k, v in merged.items() if k >= cutoff %}
+              {% set ns.r = ns.r | combine({k: v}) %}
+            {% endfor %}
+            {{ ns.r }}
+          people_peak_by_day: >-
+            {% set ns = namespace(r={}) %}
+            {% set now_people = states('sensor.ac_lt2_people') | int(0) %}
+            {% set merged = old_peak | combine({day: [old_peak.get(day, 0) | int(0), now_people] | max}) %}
+            {% for k, v in merged.items() if k >= cutoff %}
+              {% set ns.r = ns.r | combine({k: v}) %}
+            {% endfor %}
+            {{ ns.r }}
+
+
+# Settings sent today per unit. An input_number (not a counter) so a reload creates it: the counter
+# domain has no reload service and would need an HA restart. No "initial:" so a restart keeps the value.
+input_number:
+  ac_lt2_left_changes:
+    name: "AC LT2 Left changes today"
+    icon: mdi:counter
+    min: 0
+    max: 999
+    step: 1
+    mode: box
+  ac_lt2_middle_changes:
+    name: "AC LT2 Middle changes today"
+    icon: mdi:counter
+    min: 0
+    max: 999
+    step: 1
+    mode: box
+  ac_lt2_right_changes:
+    name: "AC LT2 Right changes today"
+    icon: mdi:counter
+    min: 0
+    max: 999
+    step: 1
+    mode: box
+
 script:
   # One implementation of every guard and of the two IR calls. Each thin
   # automation below passes the entities of its own unit, so a fix here applies
@@ -359,3 +613,89 @@ automation:
               message: >-
                 A fresh power report is below 50 W 15 minutes after an automatic
                 command. Check the physical AC before enabling control again.
+
+  # ---- push notification: only for settings the automation sent (not for a user's change)
+  - id: ac_lt2_notify_setting_sent
+    alias: "AC LT2 - notify when a setting is sent"
+    mode: queued
+    variables:
+      notify_service: notify.mobile_app_cph2457   # change or add the receiving phone here
+      dashboard_path: /ac-adaptive-lt2
+    triggers:
+      - trigger: state
+        entity_id:
+          - input_text.ac_lt2_left_last_applied
+          - input_text.ac_lt2_middle_last_applied
+          - input_text.ac_lt2_right_last_applied
+    conditions:
+      # "temperature|fan" only: "armed", "manual change" and unknown are not settings.
+      - condition: template
+        value_template: >-
+          {{ trigger.to_state is not none
+             and '|' in trigger.to_state.state
+             and (trigger.from_state is none or trigger.from_state.state != trigger.to_state.state)
+             and trigger.to_state.context.user_id is none }}
+    actions:
+      - variables:
+          unit: >-
+            {{ {'input_text.ac_lt2_left_last_applied': 'left',
+                'input_text.ac_lt2_middle_last_applied': 'middle',
+                'input_text.ac_lt2_right_last_applied': 'right'}[trigger.entity_id] }}
+          ac_name: >-
+            {{ {'left': 'Sharp Kiri', 'middle': 'Sharp Tengah', 'right': 'LG Kanan'}[unit] }}
+          temperature: "{{ trigger.to_state.state.split('|')[0] }}"
+          fan: "{{ trigger.to_state.state.split('|')[1] }}"
+      - action: input_number.increment
+        target:
+          entity_id: "input_number.ac_lt2_{{ unit }}_changes"
+      - action: "{{ notify_service }}"
+        continue_on_error: true
+        data:
+          title: "AC {{ ac_name }}: {{ temperature }} °C · Fan {{ fan }}"
+          message: >-
+            Setelan dikirim pukul {{ now().strftime('%H:%M') }} untuk
+            {{ states('sensor.ac_lt2_people') | int(0) }} orang di Lantai 2.
+          data:
+            tag: "ac_lt2_{{ unit }}"
+            clickAction: "{{ dashboard_path }}"
+            url: "{{ dashboard_path }}"
+
+  # ---- daily summary after work hours, then the counters start again
+  - id: ac_lt2_daily_summary
+    alias: "AC LT2 - daily summary"
+    mode: single
+    variables:
+      notify_service: notify.mobile_app_cph2457
+      dashboard_path: /ac-adaptive-lt2
+    triggers:
+      - trigger: time
+        at: "18:05:00"
+    conditions:
+      - condition: time
+        weekday: [mon, tue, wed, thu, fri]
+      - condition: state
+        entity_id: input_boolean.ac_adaptive_count_enabled
+        state: "on"
+    actions:
+      - action: "{{ notify_service }}"
+        continue_on_error: true
+        data:
+          title: "AC Lantai 2: ringkasan hari ini"
+          message: >-
+            Setelan dikirim: Tengah {{ states('input_number.ac_lt2_middle_changes') | int(0) }}x,
+            Kanan {{ states('input_number.ac_lt2_right_changes') | int(0) }}x,
+            Kiri {{ states('input_number.ac_lt2_left_changes') | int(0) }}x.
+            Hitungan orang terakhir: {{ states('input_number.ac_lt2_count_last') | int(0) }}
+            (pukul {{ (state_attr('input_datetime.ac_lt2_count_time', 'timestamp') | float(0)) | timestamp_custom('%H:%M') }}).
+          data:
+            tag: ac_lt2_daily
+            clickAction: "{{ dashboard_path }}"
+            url: "{{ dashboard_path }}"
+      - action: input_number.set_value
+        target:
+          entity_id:
+            - input_number.ac_lt2_left_changes
+            - input_number.ac_lt2_middle_changes
+            - input_number.ac_lt2_right_changes
+        data:
+          value: 0

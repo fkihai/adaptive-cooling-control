@@ -38,13 +38,14 @@ def expected_lingering_timers() -> bool:
 class Site:
     """A fake floor 2 with helpers to move time and read results."""
 
-    def __init__(self, hass, freezer, ai, calls, flags, notifications):
+    def __init__(self, hass, freezer, ai, calls, flags, notifications, pushes=None):
         self.hass = hass
         self.freezer = freezer
         self.ai = ai
         self.calls = calls  # (service, data) for every fake climate call
         self.flags = flags  # flags["fail_temperature"]: make set_temperature raise
         self.notifications = notifications  # persistent_notification.create data
+        self.pushes = pushes if pushes is not None else []  # notify.mobile_app_cph2457 data
         self.now = START
         self._tick = 0
 
@@ -151,6 +152,7 @@ async def site(hass: HomeAssistant, freezer, tmp_path):
     calls = []
     flags = {"fail_temperature": False}
     notifications = []
+    pushes = []
 
     async def fake_climate(call: ServiceCall):
         calls.append((call.service, dict(call.data)))
@@ -160,6 +162,10 @@ async def site(hass: HomeAssistant, freezer, tmp_path):
     async def fake_notification(call: ServiceCall):
         notifications.append(dict(call.data))
 
+    async def fake_push(call: ServiceCall):
+        pushes.append(dict(call.data))
+
+    hass.services.async_register("notify", "mobile_app_cph2457", fake_push)
     hass.services.async_register("climate", "set_temperature", fake_climate)
     hass.services.async_register("climate", "set_fan_mode", fake_climate)
     hass.services.async_register("climate", "set_hvac_mode", fake_climate)
@@ -178,6 +184,6 @@ async def site(hass: HomeAssistant, freezer, tmp_path):
                    "automation"):
         assert await async_setup_component(hass, domain, config), domain
     hass.services.async_register("persistent_notification", "create", fake_notification)
-    s = Site(hass, freezer, ai, calls, flags, notifications)
+    s = Site(hass, freezer, ai, calls, flags, notifications, pushes)
     await s.settle(8)
     return s

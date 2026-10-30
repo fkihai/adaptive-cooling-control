@@ -1,179 +1,97 @@
-"""Offline contract checks for the Sharp middle pilot (no live HA or AC calls).
+"""Structure checks for the consolidated control package (no live HA or AC calls).
 
-Run with: python run.py test. Needs PyYAML and Jinja2 (installed with Home Assistant);
-this does not replace the HA config check (python run.py check).
+Behaviour (every gate, the cooldowns, the manual pause, the power check) is tested on real
+Home Assistant Core in test_control_runtime.py. These tests pin the shape of the YAML that
+those runtime tests cannot see: which entity each unit may command and the order of actions.
+Run with: python run.py test.
 """
 
-import datetime as dt
 from pathlib import Path
 import unittest
 
 import yaml
-from jinja2 import Environment
 
 
 ROOT = Path(__file__).resolve().parents[1]
-COUNT = yaml.safe_load((ROOT / "packages/adaptive_cooling_lt2.yaml").read_text(encoding="utf-8"))
 CONTROL = yaml.safe_load((ROOT / "packages/adaptive_cooling_lt2_control.yaml").read_text(encoding="utf-8"))
 AUTOMATIONS = {a["id"]: a for a in CONTROL["automation"]}
-APPLY = AUTOMATIONS["ac_lt2_middle_apply"]
-POWER = "sensor.0x60b763fffe1f48ee_power"
-CLIMATE = "climate.ac_sharp_lt_2_tengah"
+SCRIPT = CONTROL["script"]["ac_lt2_apply_setting"]["sequence"]
+UNITS = {
+    "left": ("climate.ac_sharp_lt_2_kiri", "sensor.0x60b763fffe1e451c_power", 18, 30),
+    "middle": ("climate.ac_sharp_lt_2_tengah", "sensor.0x60b763fffe1f48ee_power", 18, 30),
+    "right": ("climate.ac_lg_2_2", "sensor.0x60b763fffe1e67ae_power", 16, 30),
+}
 
 
-class Clock:
-    def __init__(self, timestamp=1_800_000_000):
-        self.ts = timestamp
-
-    def timestamp(self):
-        return self.ts
-
-
-class State:
-    def __init__(self, last_updated):
-        self.last_changed = last_updated
-        self.last_reported = last_updated
-
-
-class ClimateDomain(dict):
-    pass
-
-
-class FakeHA:
-    def __init__(self):
-        self.clock = Clock()
-        self.values = {
-            "input_boolean.ac_lt2_middle_control_enabled": "on",
-            "input_boolean.ac_adaptive_count_enabled": "on",
-            "schedule.ac_adaptive_hours": "on",
-            "binary_sensor.ac_lt2_occupied": "on",
-            "binary_sensor.ac_lt2_count_stale": "off",
-            CLIMATE: "cool",
-            POWER: "1000",
-            "input_text.ac_lt2_middle_last_applied": "unknown",
-            "input_datetime.ac_lt2_middle_last_command": "unknown",
-            "input_datetime.ac_lt2_middle_last_manual": "unknown",
-            "sensor.ac_lt2_middle_recommended_temperature": "20",
-            "sensor.ac_lt2_middle_recommended_fan": "Medium",
-            "sensor.ac_lt2_middle_recommended_setting": "20|Medium",
-        }
-        self.timestamps = {}
-        self.updated = self.clock.timestamp() - 60
-
-    def render(self, template, **extra):
-        env = Environment()
-
-        def number(value, default, convert):
-            try:
-                return convert(value)
-            except (ValueError, TypeError):
-                return default
-
-        env.filters["int"] = lambda x, d=0: number(x, d, int)
-        env.filters["float"] = lambda x, d=0.0: number(x, d, float)
-        ns = type("States", (), {})()
-        ns.sensor = ClimateDomain({POWER.removeprefix("sensor."): State(dt.datetime.fromtimestamp(self.updated, dt.timezone.utc))})
-        vars_ = {
-            "now": lambda: self.clock,
-            "is_state": lambda entity, value: self.values.get(entity) == value,
-            "state_attr": lambda entity, attr: (
-                self.timestamps.get(entity) if attr == "timestamp" else
-                ["Auto", "Low", "Medium", "High"] if attr == "fan_modes" and entity == CLIMATE else None
-            ),
-            "has_value": lambda entity: self.values.get(entity, "unknown") not in ("unknown", "unavailable"),
-            "as_timestamp": lambda value, d=0: value.timestamp() if hasattr(value, "timestamp") else d,
-            "target_temperature": int(self.values["sensor.ac_lt2_middle_recommended_temperature"]),
-            "target_fan": self.values["sensor.ac_lt2_middle_recommended_fan"],
-            "target_setting": self.values["sensor.ac_lt2_middle_recommended_temperature"] + "|" + self.values["sensor.ac_lt2_middle_recommended_fan"],
-        }
-        # HA's states() function also exposes states.sensor in templates.
-        class States:
-            sensor = ns.sensor
-
-            def __call__(self, entity):
-                return self_values.get(entity, "unknown")
-
-        self_values = self.values
-        vars_["states"] = States()
-        vars_.update(extra)
-        return env.from_string(template).render(**vars_).strip()
-
-    def eligible(self):
-        for cond in APPLY["conditions"]:
-            if cond["condition"] == "state":
-                if self.values[cond["entity_id"]] != cond["state"]:
-                    return False
-            elif cond["condition"] == "numeric_state":
-                if float(self.values[cond["entity_id"]]) <= cond["above"]:
-                    return False
-            elif cond["condition"] == "template":
-                if self.render(cond["value_template"]).lower() != "true":
-                    return False
-            else:
-                raise AssertionError(cond)
-        return True
+def climate_actions():
+    return [a for a in SCRIPT if str(a.get("action", "")).startswith("climate.")]
 
 
 class ControlTests(unittest.TestCase):
-    def test_only_middle_ac_receives_commands(self):
-        actions = APPLY["actions"]
-        calls = [a for a in actions if a.get("action", "").startswith("climate.")]
+    def test_script_sends_only_temperature_then_fan_to_the_unit_it_is_given(self):
+        calls = climate_actions()
         self.assertEqual([a["action"] for a in calls], ["climate.set_temperature", "climate.set_fan_mode"])
-        self.assertTrue(all(a["target"]["entity_id"] == CLIMATE for a in calls))
-        self.assertTrue(all(a["target"]["entity_id"] not in ("climate.ac_sharp_lt_2_kiri", "climate.ac_lg_2_2") for a in calls))
-        self.assertFalse(CONTROL["input_boolean"]["ac_lt2_middle_control_enabled"]["initial"])
-        # Record the attempt before either IR service (including a failed service).
-        self.assertLess(next(i for i, a in enumerate(actions) if a.get("action") == "input_datetime.set_datetime"),
-                        next(i for i, a in enumerate(actions) if a.get("action", "").startswith("climate.")))
-        self.assertLess(next(i for i, a in enumerate(actions) if a.get("action") == "input_text.set_value"),
-                        next(i for i, a in enumerate(actions) if a.get("action", "").startswith("climate.")))
+        for call in calls:
+            self.assertEqual(call["target"]["entity_id"], "{{ ac_climate }}")
+        self.assertNotIn("set_hvac_mode", str(SCRIPT))
+        self.assertNotIn("turn_on", str(SCRIPT))
+        self.assertNotIn("turn_off", str(SCRIPT))
 
-    def test_controls_block_on_missing_preconditions(self):
-        h = FakeHA()
-        self.assertTrue(h.eligible())
-        for entity, value in (("input_boolean.ac_lt2_middle_control_enabled", "off"),
-                              ("input_boolean.ac_adaptive_count_enabled", "off"),
-                              ("schedule.ac_adaptive_hours", "off"),
-                              ("binary_sensor.ac_lt2_occupied", "off"),
-                              ("binary_sensor.ac_lt2_count_stale", "on"),
-                              (CLIMATE, "off"), (POWER, "0"),
-                              ("sensor.ac_lt2_middle_recommended_temperature", "17"),
-                              ("sensor.ac_lt2_middle_recommended_fan", "invalid"),
-                               ("input_text.ac_lt2_middle_last_applied", "20|Medium")):
-            with self.subTest(entity=entity, value=value):
-                other = FakeHA()
-                other.values[entity] = value
-                self.assertFalse(other.eligible())
+    def test_each_unit_commands_only_its_own_ac_with_its_own_limits(self):
+        for unit, (climate, power, low, high) in UNITS.items():
+            with self.subTest(unit=unit):
+                data = AUTOMATIONS[f"ac_lt2_{unit}_apply"]["actions"][0]["data"]
+                self.assertEqual(AUTOMATIONS[f"ac_lt2_{unit}_apply"]["actions"][0]["action"],
+                                 "script.ac_lt2_apply_setting")
+                self.assertEqual(data["ac_climate"], climate)
+                self.assertEqual(data["ac_power"], power)
+                self.assertEqual(data["ac_control_switch"], f"input_boolean.ac_lt2_{unit}_control_enabled")
+                self.assertEqual(data["ac_last_applied"], f"input_text.ac_lt2_{unit}_last_applied")
+                self.assertEqual(data["ac_setting"], f"sensor.ac_lt2_{unit}_recommended_setting")
+                self.assertEqual((data["ac_min_temp"], data["ac_max_temp"]), (low, high))
 
-    def test_power_freshness_and_command_cooldowns(self):
-        h = FakeHA()
-        h.updated = h.clock.ts - 20 * 60
-        self.assertFalse(h.eligible())
-        h.updated = h.clock.ts - 19 * 60
-        self.assertTrue(h.eligible())
-        h.timestamps["input_datetime.ac_lt2_middle_last_command"] = h.clock.ts - 9 * 60
-        self.assertFalse(h.eligible())
-        h.timestamps["input_datetime.ac_lt2_middle_last_command"] = h.clock.ts - 10 * 60
-        self.assertTrue(h.eligible())
-        h.timestamps["input_datetime.ac_lt2_middle_last_manual"] = h.clock.ts - 29 * 60
-        self.assertFalse(h.eligible())
-        h.timestamps["input_datetime.ac_lt2_middle_last_manual"] = h.clock.ts - 30 * 60
-        self.assertTrue(h.eligible())
+    def test_switches_have_no_initial_value_so_a_restart_keeps_their_state(self):
+        for unit in UNITS:
+            self.assertNotIn("initial", CONTROL["input_boolean"][f"ac_lt2_{unit}_control_enabled"] or {})
 
-    def test_manual_pause_and_power_check_do_not_send_ir(self):
-        manual = AUTOMATIONS["ac_lt2_middle_manual_pause"]
-        check = AUTOMATIONS["ac_lt2_middle_check_power"]
-        arm = AUTOMATIONS["ac_lt2_middle_arm"]
-        self.assertIn("context.user_id is not none", manual["conditions"][0]["value_template"])
-        self.assertIn("context.parent_id is none", manual["conditions"][0]["value_template"])
-        self.assertEqual(manual["actions"][1]["target"]["entity_id"],
-                         "input_boolean.ac_lt2_middle_control_enabled")
-        self.assertEqual(arm["actions"][0]["data"]["value"], "armed")
-        self.assertIn("armed", str(APPLY["triggers"]))
-        self.assertEqual(check["actions"][0]["delay"]["minutes"], 15)
-        self.assertIn("last_reported", str(check["actions"][1]))
-        for a in (arm, manual, check):
-            self.assertNotIn("climate.", str(a["actions"]))
+    def test_the_attempt_is_recorded_before_either_ir_call(self):
+        first_ir = next(i for i, a in enumerate(SCRIPT) if str(a.get("action", "")).startswith("climate."))
+        stamp = next(i for i, a in enumerate(SCRIPT) if a.get("action") == "input_datetime.set_datetime")
+        record = next(i for i, a in enumerate(SCRIPT) if a.get("action") == "input_text.set_value")
+        self.assertLess(stamp, first_ir)
+        self.assertLess(record, first_ir)
+
+    def test_script_keeps_every_guard(self):
+        text = str(SCRIPT)
+        for needle in ("input_boolean.ac_adaptive_count_enabled", "schedule.ac_adaptive_hours",
+                       "binary_sensor.ac_lt2_occupied", "binary_sensor.ac_lt2_count_stale",
+                       "last_reported", "20 * 60", "10 * 60", "30 * 60", "ac_min_temp", "fan_modes",
+                       "ac_last_applied"):
+            self.assertIn(needle, text)
+
+    def test_manual_pause_pauses_only_the_unit_that_changed_and_sends_no_ir(self):
+        manual = AUTOMATIONS["ac_lt2_manual_pause"]
+        condition = manual["conditions"][0]["value_template"]
+        self.assertIn("context.user_id is not none", condition)
+        self.assertIn("context.parent_id is none", condition)
+        actions = str(manual["actions"])
+        self.assertIn("input_boolean.turn_off", actions)
+        self.assertIn("ac_lt2_{{ unit }}_control_enabled", actions)
+        self.assertNotIn("climate.set", actions)
+
+    def test_arming_and_power_check_send_no_ir(self):
+        for key in ("ac_lt2_arm", "ac_lt2_check_power"):
+            self.assertNotIn("climate.set", str(AUTOMATIONS[key]["actions"]))
+        self.assertIn("armed", str(AUTOMATIONS["ac_lt2_arm"]["actions"]))
+        for unit in UNITS:
+            self.assertIn("armed", str(AUTOMATIONS[f"ac_lt2_{unit}_apply"]["triggers"]))
+        check = AUTOMATIONS["ac_lt2_check_power"]
+        self.assertEqual(check["actions"][1]["delay"]["minutes"], 15)
+        self.assertIn("last_reported", str(check["actions"]))
+
+    def test_notifications_never_touch_a_climate_entity(self):
+        for key in ("ac_lt2_notify_setting_sent", "ac_lt2_daily_summary"):
+            self.assertNotIn("climate.", str(AUTOMATIONS[key]["actions"]))
 
 
 if __name__ == "__main__":
