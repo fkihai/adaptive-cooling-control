@@ -22,8 +22,8 @@ def temperatures(site):
     return [d["temperature"] for s, d in site.calls if s == "set_temperature"]
 
 
-async def live(site, people=4):
-    """Count switch on, a fresh count, then the control switch on."""
+async def live(site, people=2):
+    """Count switch on, a fresh count (2 people = normal: 20 C / High), then the control switch on."""
     await site.switch(COUNT, True)
     await site.set_count(people)
     await site.switch(CONTROL, True)
@@ -40,8 +40,8 @@ async def test_first_command_is_temperature_then_fan_only(site):
     await live(site)
     assert services(site) == ["set_temperature", "set_fan_mode"]
     assert site.calls[0][1]["temperature"] == 20
-    assert site.calls[1][1]["fan_mode"] == "Medium"
-    assert site.state(APPLIED) == "20|Medium"
+    assert site.calls[1][1]["fan_mode"] == "High"
+    assert site.state(APPLIED) == "20|High"
 
 
 async def test_never_sends_power_or_hvac_mode(site):
@@ -115,25 +115,25 @@ async def test_power_report_recovery_sends_pending_latest_target(site):
     await live(site)
     await site.after(minutes=21)
     await site.set_count(1, prev=1)
-    assert site.state("sensor.ac_lt2_middle_recommended_setting") == "26|Low"
+    assert site.state("sensor.ac_lt2_middle_recommended_setting") == "22|High"
     assert temperatures(site) == [20]
     await site.power(1000)  # same wattage, new report
     await site.after(minutes=1)
-    assert temperatures(site) == [20, 26]
+    assert temperatures(site) == [20, 22]
     assert site.state(f"input_boolean.{CONTROL}") == "on"
 
 
 async def test_right_control_is_separate_and_off_until_enabled(site):
     await site.switch(COUNT, True)
-    await site.set_count(4)
+    await site.set_count(4)  # busy: 18 C / High
     assert site.state("input_boolean.ac_lt2_right_control_enabled") == "off"
-    assert site.state("sensor.ac_lt2_right_recommended_setting") == "20|Medium"
+    assert site.state("sensor.ac_lt2_right_recommended_setting") == "18|High"
     assert site.calls == []
     await site.switch("ac_lt2_right_control_enabled", True)
     assert services(site) == ["set_temperature", "set_fan_mode"]
     assert all(d["entity_id"] == ["climate.ac_lg_2_2"] for _, d in site.calls)
-    assert site.calls[0][1]["temperature"] == 20
-    assert site.calls[1][1]["fan_mode"] == "Medium"
+    assert site.calls[0][1]["temperature"] == 18
+    assert site.calls[1][1]["fan_mode"] == "High"
     assert site.state("input_boolean.ac_lt2_middle_control_enabled") == "off"
 
 
@@ -150,8 +150,8 @@ async def test_outside_working_hours_blocks_the_command(site):
 
 
 async def test_fan_missing_from_ac_modes_blocks_the_command(site):
-    site.hass.states.async_set(CLIMATE, "cool", {"fan_modes": ["Auto", "Low", "High"]})
-    await live(site)  # target fan is Medium
+    site.hass.states.async_set(CLIMATE, "cool", {"fan_modes": ["Auto", "Low", "Medium"]})
+    await live(site)  # target fan is High, which this AC does not list
     assert site.calls == []
 
 
@@ -165,12 +165,12 @@ async def test_unchanged_target_is_not_resent(site):
 
 
 async def test_rate_limit_delays_a_new_target_by_10_minutes(site):
-    await live(site)  # 10:10, sends 20|Medium
+    await live(site)  # 10:10, sends 20|High
     assert temperatures(site) == [20]
     await site.after(minutes=3)
     await site.power()
     await site.set_count(8)  # 10:13, the recommendation changes to 18|High
-    assert site.state("sensor.ac_lt2_middle_recommended_fan") == "High"
+    assert site.state(APPLIED) == "20|High"
     assert len(site.calls) == 2  # blocked: last attempt was 3 minutes ago
     await site.tick(minutes=6)  # 10:19
     assert len(site.calls) == 2
@@ -184,9 +184,9 @@ async def test_new_target_after_the_gap_is_sent(site):
     await live(site)
     await site.tick(minutes=11)
     await site.set_count(1, prev=1)
-    assert site.state("sensor.ac_lt2_middle_recommended_temperature") == "26"
-    assert temperatures(site) == [20, 26]
-    assert site.calls[-1][1]["fan_mode"] == "Low"
+    assert site.state("sensor.ac_lt2_middle_recommended_temperature") == "22"
+    assert temperatures(site) == [20, 22]
+    assert site.calls[-1][1]["fan_mode"] == "High"
 
 
 async def test_user_change_in_ha_pauses_and_switches_control_off(site):
@@ -212,7 +212,7 @@ async def test_user_change_in_ha_pauses_and_switches_control_off(site):
 
 
 async def test_control_resumes_60_minutes_after_a_manual_change(site):
-    await live(site)  # 10:10, sends 20|Medium
+    await live(site)  # 10:10, sends 20|High
     assert len(site.calls) == 2
     await site.after(minutes=1)
     await site.manual_change(25, fan="High")  # 10:11
@@ -248,7 +248,7 @@ async def test_power_check_pause_is_not_auto_resumed(site):
     await site.power(5)
     await site.after(minutes=8)  # 10:25, power check turns control off
     assert site.state(f"input_boolean.{CONTROL}") == "off"
-    assert site.state(APPLIED) == "20|Medium"  # not "manual change"
+    assert site.state(APPLIED) == "20|High"  # not "manual change"
     await site.tick(minutes=60)  # a fresh report much later must not re-enable it
     assert site.state(f"input_boolean.{CONTROL}") == "off"
     assert len(site.calls) == 2
@@ -258,7 +258,7 @@ async def test_change_without_a_user_does_not_pause(site):
     await live(site)
     site.hass.states.async_set(
         CLIMATE, "cool",
-        {"fan_modes": ["Auto", "Low", "Medium", "High"], "temperature": 20, "fan_mode": "Medium"})
+        {"fan_modes": ["Auto", "Low", "Medium", "High"], "temperature": 20, "fan_mode": "High"})
     await site.settle()
     assert site.state(f"input_boolean.{CONTROL}") == "on"
 
@@ -278,7 +278,7 @@ async def test_failed_command_is_recorded_and_not_retried(site):
     site.flags["fail_temperature"] = True
     await live(site)
     assert services(site) == ["set_temperature"]  # the fan command never follows
-    assert site.state(APPLIED) == "20|Medium"
+    assert site.state(APPLIED) == "20|High"
     for _ in range(3):
         await site.tick(minutes=10)
     assert services(site) == ["set_temperature"]

@@ -29,7 +29,7 @@ flowchart LR
 
 | Situation | Behaviour |
 |-----------|-----------|
-| Room empty (occupancy off for 15 minutes) | Level 0, energy-saving setpoint (27 C / Low) is shown, but the control package sends **nothing** while the room is empty, so the AC keeps its last setting. The pilot never turns an AC off |
+| Room empty (occupancy off for 15 minutes) | Level 0, energy-saving setpoint (27 C / High) is shown, but the control package sends **nothing** while the room is empty, so the AC keeps its last setting. The pilot never turns an AC off |
 | Latest accepted count older than 30 minutes while occupied | The safe level (`stale_level`, 2 = normal) and the `stale` attribute is true |
 | Gemini fails or answers below 70 confidence | Nothing is written; the last accepted count stays |
 | Gemini answers 0 while Frigate's raw occupancy sensor is still `on` | Treated as a bad frame: nothing is written; the last accepted count stays. Confidence does not catch this (a 0 came back with confidence 100 on 2026-10-29) |
@@ -78,12 +78,12 @@ The people count is one number for the room. Each AC turns it into its own level
 
 | Level | Name | People | Recommended temperature | Recommended fan |
 |-------|------|--------|-------------------------|-----------------|
-| 0 | empty | none for 15 minutes | 27 C | Low |
-| 1 | few | 1 to 2 | 26 C | Low |
-| 2 | normal | 3 to 4 | 18 C (left), 20 C (middle, right) | Medium |
-| 3 | busy | 5 or more | 18 C | High |
+| 0 | empty | none for 15 minutes | 27 C | High |
+| 1 | few | 1 (a count of 0 while the 15-minute hold is still on also counts as few) | 22 C | High |
+| 2 | normal | 2 to 3 | 20 C | High |
+| 3 | busy | 4 or more | 18 C | High |
 
-Floor 2 usually has 4 people, which is level 2. Because the latest answer is used, an answer of 3 or 5 moves the target immediately; that is deliberate, so the AC follows the room.
+The fan is High at every level; only the temperature changes. Floor 2 usually has 4 people, which is level 3. Because the latest answer is used, an answer of 3 or 5 moves the target immediately; that is deliberate, so the AC follows the room.
 
 The three ACs (names in the package are English, the site calls them kiri, tengah and kanan):
 
@@ -98,10 +98,10 @@ The three ACs (names in the package are English, the site calls them kiri, tenga
 | Key | Meaning | Now |
 |-----|---------|-----|
 | `entity_id` | the AC's climate entity, used by that unit's control automation and its `recommended_setting` sensor | see table above |
-| `few_max` | highest head count still "few" | 2 |
-| `normal_max` | highest head count still "normal"; above it is "busy" | 4 |
-| `temperature` | temperature for levels `[empty, few, normal, busy]` | left `[27, 26, 18, 18]`; middle and right `[27, 26, 20, 18]` |
-| `fan` | fan for the same levels (the AC's own fan names) | `[Low, Low, Medium, High]` |
+| `few_max` | highest head count still "few" | 1 |
+| `normal_max` | highest head count still "normal"; above it is "busy" | 3 |
+| `temperature` | temperature for levels `[empty, few, normal, busy]` | `[27, 22, 20, 18]` on all three |
+| `fan` | fan for the same levels (the AC's own fan names) | `[High, High, High, High]` |
 | `min_temp`, `max_temp` | the AC's own limits; a recommendation is kept inside them | 18 and 30 (Sharp), 16 and 30 (LG) |
 
 Two more settings apply to all ACs: `stale_minutes` (30) and `stale_level` (2).
@@ -230,7 +230,7 @@ Tests: `tests/test_dashboard_file.py` runs every JavaScript template with Node (
 
 | Automation | Sends |
 |------------|-------|
-| `ac_lt2_notify_setting_sent` | "AC Sharp Tengah: 20 °C · Fan Medium", "Setelan dikirim pukul 09:50 untuk 3 orang di Lantai 2", one per AC with its own tag so a newer one replaces the older. Only for settings sent by the automation; nothing for `armed`, a manual change or a user's own edit |
+| `ac_lt2_notify_setting_sent` | "AC Sharp Tengah: 20 °C · Fan High", "Setelan dikirim pukul 09:50 untuk 3 orang di Lantai 2", one per AC with its own tag so a newer one replaces the older. Only for settings sent by the automation; nothing for `armed`, a manual change or a user's own edit |
 | `ac_lt2_daily_summary` | one push 5 minutes after `schedule.ac_adaptive_hours` turns off (18:05 now); a day outside the schedule gets none. Settings sent per AC today and the last count; then `input_number.ac_lt2_<position>_changes` resets |
 
 Tapping a push opens the dashboard. The wording is "dikirim" (sent), because IR cannot confirm that the AC changed.

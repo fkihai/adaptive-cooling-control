@@ -16,12 +16,13 @@ STATUS = "sensor.ac_lt2_middle_status"
 FANS = ["Auto", "Low", "Medium", "High"]
 
 
-def set_ac(site, state="cool", temperature=20, fan="Medium"):
+def set_ac(site, state="cool", temperature=20, fan="High"):
     site.hass.states.async_set(CLIMATE, state,
                                {"fan_modes": FANS, "temperature": temperature, "fan_mode": fan})
 
 
-async def live(site, people=4):
+async def live(site, people=2):
+    """2 people = normal level: 20 C / High."""
     await site.switch(COUNT, True)
     await site.set_count(people)
     await site.switch(CONTROL, True)
@@ -32,8 +33,8 @@ async def live(site, people=4):
 
 async def test_status_is_ok_when_the_ac_matches_the_target(site):
     await site.switch(COUNT, True)
-    await site.set_count(4)  # normal level: 20 C / Medium for the middle AC
-    set_ac(site, temperature=20, fan="Medium")
+    await site.set_count(2)  # normal level: 20 C / High for the middle AC
+    set_ac(site, temperature=20, fan="High")
     await site.settle()
     assert site.state(STATUS) == "ok"
 
@@ -47,11 +48,11 @@ async def test_status_says_the_ac_is_off(site):
 
 async def test_status_says_control_is_off_and_shows_the_suggestion(site):
     await site.switch(COUNT, True)
-    await site.set_count(4)
+    await site.set_count(2)
     set_ac(site, temperature=26, fan="Low")
     await site.settle()
     text = site.state(STATUS)
-    assert "Otomasi mati" in text and "20 °C" in text and "Medium" in text
+    assert "Otomasi mati" in text and "20 °C" in text and "High" in text
 
 
 async def test_status_outside_work_hours(site):
@@ -115,15 +116,15 @@ async def test_push_for_a_setting_the_automation_sent(site):
     await live(site)
     assert len(site.pushes) == 1
     push = site.pushes[0]
-    assert push["title"] == "AC Sharp Tengah: 20 °C · Fan Medium"
-    assert "4 orang" in push["message"]
+    assert push["title"] == "AC Sharp Tengah: 20 °C · Fan High"
+    assert "2 orang" in push["message"]
     assert push["data"]["tag"] == "ac_lt2_middle"
     assert float(site.state("input_number.ac_lt2_middle_changes")) == 1
 
 
 async def test_no_push_for_the_armed_marker_or_the_same_target(site):
     await site.switch(COUNT, True)
-    await site.set_count(4)
+    await site.set_count(2)
     await site.switch(CONTROL, True)
     await site.tick(minutes=11)  # the same target is not sent again
     assert len(site.pushes) == 1
@@ -135,7 +136,7 @@ async def test_a_new_target_sends_a_second_push(site):
     await site.set_count(8)
     await site.tick(minutes=1)
     assert [p["title"] for p in site.pushes] == [
-        "AC Sharp Tengah: 20 °C · Fan Medium",
+        "AC Sharp Tengah: 20 °C · Fan High",
         "AC Sharp Tengah: 18 °C · Fan High",
     ]
 
@@ -206,7 +207,7 @@ async def test_activity_records_a_sent_setting_and_the_daily_total(site):
     await live(site)
     events = attrs(site)["events"]
     assert events[0]["unit"] == "middle" and events[0]["kind"] == "sent"
-    assert events[0]["value"] == "20|Medium"
+    assert events[0]["value"] == "20|High"
     assert attrs(site)["sent_by_day"]["2026-10-29"]["middle"] == 1
     assert site.state(ACTIVITY) == "1"
 

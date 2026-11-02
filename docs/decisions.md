@@ -59,6 +59,13 @@ Each entry: the decision, the evidence, and what would change it. Dates are abso
 * **Why it matters:** the level table in the guide and the plan must show per-AC values. A single "normal = 18 C" statement is wrong for middle and right.
 * **Would change it if:** staff report either unit as too cold or too warm; then change that AC's `temperature` list only, keep `min_temp`/`max_temp` unchanged, and re-run the offline checks before installing.
 
+## 2026-11-02: new people-to-temperature rule, fan always High (supersedes "normal per AC")
+
+* **Decision (user):** 0 people 27 C, 1 person 22 C, 2 to 3 people 20 C, 4 or more people 18 C, fan High at every level, the same for left, middle and right. In the settings: `few_max: 1`, `normal_max: 3`, `temperature: [27, 22, 20, 18]`, `fan: [High, High, High, High]`.
+* **Behaviour deliberately unchanged (user: "behavior jangan diubah, cukup range-nya"):** level 0 (27 C) is only a suggestion; the control package still sends nothing while the room is empty. A count of 0 while the 15-minute hold keeps the room occupied is level 1 (22 C), and a stale count is level 2 (20 C). The right LG's 16 C floor and the Sharps' 18 C floor do not clip any of these values.
+* **Why it matters:** the pilot AC settings are now colder at low occupancy (1 to 2 people: 26 C / Low before, 22 C or 20 C / High now) and 4 people is now the busy level, so expect more cooling and fan noise.
+* **Would change it if:** staff report the rooms too cold or the fan too loud, or the power bill rises; change `temperature` and `fan` only.
+
 ## 2026-10-29: per-unit switches restore their last state (no `initial:`)
 
 * **Decision:** none of the helpers created by the two packages has `initial:`, including `input_boolean.ac_lt2_left/middle/right_control_enabled` and `input_boolean.ac_adaptive_count_enabled`. After a restart HA restores the last state instead of forcing every switch off.

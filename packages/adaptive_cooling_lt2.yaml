@@ -92,26 +92,26 @@ template:
       ac_settings:
         left:
           entity_id: climate.ac_sharp_lt_2_kiri   # Sharp, 18 to 30 C
-          few_max: 2
-          normal_max: 4
-          temperature: [27, 26, 18, 18]
-          fan: [Low, Low, Medium, High]
+          few_max: 1
+          normal_max: 3
+          temperature: [27, 22, 20, 18]
+          fan: [High, High, High, High]
           min_temp: 18
           max_temp: 30
         middle:
           entity_id: climate.ac_sharp_lt_2_tengah   # Sharp, 18 to 30 C (first pilot AC)
-          few_max: 2
-          normal_max: 4
-          temperature: [27, 26, 20, 18]
-          fan: [Low, Low, Medium, High]
+          few_max: 1
+          normal_max: 3
+          temperature: [27, 22, 20, 18]
+          fan: [High, High, High, High]
           min_temp: 18
           max_temp: 30
         right:
           entity_id: climate.ac_lg_2_2   # LG, 16 to 30 C
-          few_max: 2
-          normal_max: 4
-          temperature: [27, 26, 20, 18]
-          fan: [Low, Low, Medium, High]
+          few_max: 1
+          normal_max: 3
+          temperature: [27, 22, 20, 18]
+          fan: [High, High, High, High]
           min_temp: 16
           max_temp: 30
       # A count older than this while the room is occupied is "stale"; every AC then uses

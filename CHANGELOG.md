@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- New people-to-setting rule, the same for the left, middle and right ACs:
+  1 person 22 C, 2 to 3 people 20 C, 4 or more people 18 C, and an empty room
+  27 C. The fan is High at every level (it was Low, Low, Medium, High).
+  Settings: `few_max` 1, `normal_max` 3, `temperature` `[27, 22, 20, 18]`, `fan`
+  `[High, High, High, High]`. The left Sharp is no longer colder than the other
+  two at the normal level.
+- Behaviour is unchanged: an empty room (27 C) is only a suggestion and no
+  command is sent, a count of 0 while the 15-minute hold is on counts as "few"
+  (22 C), and a stale count uses the normal level (20 C).
+- Tests use 2 people as the normal level and 4 people as the busy level, and a
+  new test checks that an empty room suggests 27 C but sends no command.
+
 ## [1.1.0] - 2026-11-02
 
 ### Added

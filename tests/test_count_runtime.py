@@ -27,7 +27,7 @@ async def test_accepted_count_uses_latest_answer(site):
     await site.after(minutes=10)  # 10:20
     assert site.ai.calls == 1
     assert site.state("sensor.ac_lt2_people") == "4"
-    assert site.state("sensor.ac_lt2_middle_level") == "2"
+    assert site.state("sensor.ac_lt2_middle_level") == "3"  # 4 people = busy
     await site.after(minutes=10)  # 10:30
     assert site.ai.calls == 2
     assert site.state("input_number.ac_lt2_count_last") == "2.0"
@@ -35,7 +35,7 @@ async def test_accepted_count_uses_latest_answer(site):
     assert site.state("sensor.ac_lt2_people") == "2"  # latest accepted answer
     await site.set_count(2, prev=2)
     assert site.state("sensor.ac_lt2_people") == "2"
-    assert site.state("sensor.ac_lt2_middle_level") == "1"
+    assert site.state("sensor.ac_lt2_middle_level") == "2"  # 2 people = normal
 
 
 async def test_failed_answer_keeps_last_count(site):
@@ -64,17 +64,17 @@ async def test_low_confidence_not_written(site):
 
 async def test_prev_write_cannot_publish_a_temporary_count(site):
     # The live 15:10 bug: writing the previous count while "last" still held an
-    # old value made max(prev, last) dip to 2 and sent 26 C. Only "last" is used now.
+    # old value made max(prev, last) dip and sent a warmer setting. Only "last" is used now.
     await site.set_count(2, prev=3)
     assert site.state("sensor.ac_lt2_people") == "2"
-    assert site.state("sensor.ac_lt2_middle_recommended_setting") == "26|Low"
+    assert site.state("sensor.ac_lt2_middle_recommended_setting") == "20|High"
     await site.call("input_number", "set_value",
                     entity_id="input_number.ac_lt2_count_prev", value=2)
     assert site.state("sensor.ac_lt2_people") == "2"  # unchanged by a prev write
     await site.call("input_number", "set_value",
                     entity_id="input_number.ac_lt2_count_last", value=4)
     assert site.state("sensor.ac_lt2_people") == "4"
-    assert site.state("sensor.ac_lt2_middle_recommended_setting") == "20|Medium"
+    assert site.state("sensor.ac_lt2_middle_recommended_setting") == "18|High"
 
 
 async def test_zero_rejected_while_frigate_sees_people(site):
@@ -126,7 +126,7 @@ async def test_room_empty_for_15_minutes_is_level_0(site):
     for ac in ("left", "middle", "right"):
         assert site.state(f"sensor.ac_lt2_{ac}_level") == "0"
         assert site.state(f"sensor.ac_lt2_{ac}_recommended_temperature") == "27"
-        assert site.state(f"sensor.ac_lt2_{ac}_recommended_fan") == "Low"
+        assert site.state(f"sensor.ac_lt2_{ac}_recommended_fan") == "High"
 
 
 async def test_short_dip_returns_without_going_empty(site):
@@ -145,7 +145,8 @@ async def test_stale_count_uses_safe_level(site):
     assert site.state("binary_sensor.ac_lt2_count_stale") == "on"
     for ac in ("left", "middle", "right"):
         assert site.state(f"sensor.ac_lt2_{ac}_level") == "2"
-        assert site.state(f"sensor.ac_lt2_{ac}_recommended_temperature") == ("18" if ac == "left" else "20")
+        assert site.state(f"sensor.ac_lt2_{ac}_recommended_temperature") == "20"
+        assert site.state(f"sensor.ac_lt2_{ac}_recommended_fan") == "High"
     await site.set_count(1)
     assert site.state("binary_sensor.ac_lt2_count_stale") == "off"
     assert site.state("sensor.ac_lt2_middle_level") == "1"
@@ -168,21 +169,39 @@ async def test_two_triggers_within_4_minutes_make_one_call(site):
     assert site.ai.calls == 2
 
 
-@pytest.mark.parametrize("people, level, left_temp, other_temp, fan", [
-    (1, 1, "26", "26", "Low"),
-    (2, 1, "26", "26", "Low"),
-    (3, 2, "18", "20", "Medium"),
-    (4, 2, "18", "20", "Medium"),
-    (5, 3, "18", "18", "High"),
-    (6, 3, "18", "18", "High"),
-    (50, 3, "18", "18", "High"),
+@pytest.mark.parametrize("people, level, temp, fan", [
+    (0, 1, "22", "High"),  # a count of 0 while the floor is still held occupied counts as "few"
+    (1, 1, "22", "High"),
+    (2, 2, "20", "High"),
+    (3, 2, "20", "High"),
+    (4, 3, "18", "High"),
+    (5, 3, "18", "High"),
+    (6, 3, "18", "High"),
+    (50, 3, "18", "High"),
 ])
-async def test_level_mapping_for_every_ac(site, people, level, left_temp, other_temp, fan):
+async def test_level_mapping_for_every_ac(site, people, level, temp, fan):
+    """Rule: 1 person 22, 2-3 people 20, 4 or more 18, fan High always, the same for all three ACs."""
     await site.set_count(people)
     for ac in ("left", "middle", "right"):
         assert site.state(f"sensor.ac_lt2_{ac}_level") == str(level)
-        assert site.state(f"sensor.ac_lt2_{ac}_recommended_temperature") == (left_temp if ac == "left" else other_temp)
+        assert site.state(f"sensor.ac_lt2_{ac}_recommended_temperature") == temp
         assert site.state(f"sensor.ac_lt2_{ac}_recommended_fan") == fan
+        assert site.state(f"sensor.ac_lt2_{ac}_recommended_setting") == f"{temp}|{fan}"
+
+
+async def test_empty_room_suggests_27_but_sends_no_command(site):
+    """0 people (Frigate off for 15 minutes) is level 0: 27 C is only a suggestion on the dashboard."""
+    await site.switch(COUNT_SWITCH, True)
+    await site.set_count(2)
+    await site.switch("ac_lt2_middle_control_enabled", True)
+    sent = len(site.calls)
+    assert sent == 2  # 20|High for 2 people
+    site.hass.states.async_set(FRIGATE, "off")
+    await site.after(minutes=16)
+    assert site.state("binary_sensor.ac_lt2_occupied") == "off"
+    assert site.state("sensor.ac_lt2_middle_recommended_setting") == "27|High"
+    await site.tick(minutes=11)
+    assert len(site.calls) == sent
 
 
 @pytest.mark.parametrize("when, label", [
