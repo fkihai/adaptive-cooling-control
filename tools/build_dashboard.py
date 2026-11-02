@@ -217,8 +217,16 @@ return '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;al
 
 ACTIVITY_JS = r"""
 const events = at('sensor.ac_lt2_activity', 'events') || [];
-const d = new Date();
-const today = d.getDate() + ' ' + ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'][d.getMonth()] + ' ' + d.getFullYear();
+const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+const todayKey = dayKey(new Date());
+// An event without a stored day (older data) counts as today.
+const dayLabel = (key) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+  if (!m) { return key; }
+  const x = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+  const date = x.getDate() + ' ' + MONTHS[x.getMonth()] + ' ' + x.getFullYear();
+  return (key === todayKey ? 'Hari ini' : DOW[x.getDay()]) + ' · ' + date;
+};
 const U = {};
 UNITS.forEach((u) => { U[u.k] = u; });
 const describe = (e) => {
@@ -229,7 +237,7 @@ const describe = (e) => {
   if (e.kind === 'manual') { return ['Perubahan manual', 'Manual']; }
   return ['Kontrol otomatis', e.value === 'on' ? 'On' : 'Off'];
 };
-const items = events.slice(0, 6).map((e) => {
+const item = (e) => {
   const u = U[e.unit] || { short: e.unit, color: '#8B95A7' };
   const x = describe(e);
   return '<li style="display:flex;gap:12px"><div style="display:flex;flex-direction:column;align-items:center;width:12px">' +
@@ -240,15 +248,24 @@ const items = events.slice(0, 6).map((e) => {
     '<span style="font-size:12px;color:#8E9AAD">' + x[0] + '</span></div>' +
     '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px"><span style="font-size:14px;font-weight:600;color:#E8EDF5">' + esc(x[1]) + '</span>' +
     '<span style="font-size:11px;color:#7D8798">' + esc(e.time) + '</span></div></div></li>';
+};
+const groups = [];
+events.slice(0, 6).forEach((e) => {
+  const key = e.day || todayKey;
+  const last = groups[groups.length - 1];
+  if (last && last.key === key) { last.items.push(item(e)); } else { groups.push({ key: key, items: [item(e)] }); }
 });
+const sections = groups.map((g) => '<div style="display:flex;flex-direction:column;gap:10px">' +
+  '<div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8E9AAD">' + esc(dayLabel(g.key)) + '</div>' +
+  '<ol style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column">' + g.items.join('') + '</ol></div>');
 return '<div style="' + CARD + 'padding:20px;display:flex;flex-direction:column;gap:14px;height:100%">' +
   '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div style="display:flex;flex-direction:column;gap:2px">' +
   '<span style="font-size:17px;font-weight:600;color:#E8EDF5">Aktivitas perubahan setelan</span>' +
-  '<span style="font-size:12px;color:#8E9AAD">Hari ini · ' + today + '</span></div>' +
+  '<span style="font-size:12px;color:#8E9AAD">Perubahan terbaru</span></div>' +
   '<span style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:12px;background:#1C2330;color:#C9D2DF">' +
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></span></div>' +
-  (items.length ? '<ol style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column">' + items.join('') + '</ol>'
-    : '<span style="font-size:13px;color:#8E9AAD;line-height:1.5">Belum ada perubahan tercatat hari ini.</span>') +
+  (sections.length ? sections.join('')
+    : '<span style="font-size:13px;color:#8E9AAD;line-height:1.5">Belum ada perubahan tercatat.</span>') +
   '</div>';
 """
 

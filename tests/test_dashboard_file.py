@@ -335,6 +335,32 @@ def test_activity_timeline_renders_events():
 
 
 @needs_node
+def test_activity_timeline_groups_events_by_day():
+    events = [
+        {"unit": "middle", "kind": "sent", "value": "24|Medium", "time": "10:05:12", "ts": 3, "day": "2026-10-30"},
+        {"unit": "right", "kind": "sent", "value": "26|Low", "time": "17:20:06", "ts": 2, "day": "2026-10-27"},
+        {"unit": "left", "kind": "sent", "value": "26|Low", "time": "16:01:02", "ts": 1, "day": "2026-10-27"},
+    ]
+    html = run(by_marker("Aktivitas perubahan setelan"),
+               site_states(**{"sensor.ac_lt2_activity": s("3", events=events)}))
+    t = text(html)
+    assert t.index("Hari ini · 30 Oktober 2026") < t.index("10:05:12") < t.index("Selasa · 27 Oktober 2026")
+    assert t.index("Selasa · 27 Oktober 2026") < t.index("17:20:06") < t.index("16:01:02")
+    assert t.count("Selasa · 27 Oktober 2026") == 1
+
+
+@needs_node
+def test_activity_timeline_does_not_call_old_events_today():
+    """An event from an earlier day must never sit under a "Hari ini" header (Monday morning case)."""
+    events = [{"unit": "right", "kind": "sent", "value": "26|Low", "time": "17:20:06", "ts": 1, "day": "2026-10-27"}]
+    html = run(by_marker("Aktivitas perubahan setelan"),
+               site_states(**{"sensor.ac_lt2_activity": s("1", events=events)}))
+    t = text(html)
+    assert "Hari ini" not in t
+    assert "Selasa · 27 Oktober 2026" in t and "17:20:06" in t
+
+
+@needs_node
 def test_activity_timeline_when_empty():
     t = text(run(by_marker("Aktivitas perubahan setelan"), site_states()))
     assert "Belum ada perubahan tercatat" in t
