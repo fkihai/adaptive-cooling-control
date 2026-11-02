@@ -724,6 +724,17 @@ automation:
             tag: "ac_lt2_{{ unit }}"
             clickAction: "{{ dashboard_path }}"
             url: "{{ dashboard_path }}"
+      # The same text in the HA notification bell. One fixed notification_id for all three units, so a new
+      # setting replaces the previous one instead of adding to it and the other notifications in the bell are
+      # not buried under this feature's.
+      - action: persistent_notification.create
+        continue_on_error: true
+        data:
+          notification_id: ac_lt2_adaptive
+          title: "AC {{ ac_name }}: {{ temperature }} °C · Fan {{ fan }}"
+          message: >-
+            Setelan dikirim pukul {{ now().strftime('%H:%M') }} untuk
+            {{ states('sensor.ac_lt2_people') | int(0) }} orang di Lantai 2.
 
   # ---- daily summary after work hours, then the counters start again
   - id: ac_lt2_daily_summary

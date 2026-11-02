@@ -66,6 +66,13 @@ Each entry: the decision, the evidence, and what would change it. Dates are abso
 * **Why it matters:** the pilot AC settings are now colder at low occupancy (1 to 2 people: 26 C / Low before, 22 C or 20 C / High now) and 4 people is now the busy level, so expect more cooling and fan noise.
 * **Would change it if:** staff report the rooms too cold or the fan too loud, or the power bill rises; change `temperature` and `fan` only.
 
+## 2026-11-02: notification bell entry for a sent setting, one fixed id
+
+* **Decision (user):** when `ac_lt2_notify_setting_sent` sends a setting it also creates a Home Assistant notification (the bell) with the same title and text as the phone push. No new automation or id for the automation: one more action in the existing one. `notification_id` is the fixed `ac_lt2_adaptive` for all three ACs, so each new setting replaces the previous entry.
+* **Why one id:** the user does not want the other notifications in the bell buried by this feature's. One id means at most one entry, whatever the number of changes.
+* **Cost:** if two ACs change together only the last is visible in the bell. The push (one tag per AC), the timeline and `sensor.ac_lt2_activity` keep the complete history. A per-AC id (three entries) was offered and not chosen.
+* **Would change it if:** staff miss a change because another AC's replaced it; then use `ac_lt2_<unit>` ids (max three entries).
+
 ## 2026-10-29: per-unit switches restore their last state (no `initial:`)
 
 * **Decision:** none of the helpers created by the two packages has `initial:`, including `input_boolean.ac_lt2_left/middle/right_control_enabled` and `input_boolean.ac_adaptive_count_enabled`. After a restart HA restores the last state instead of forcing every switch off.

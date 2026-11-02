@@ -157,6 +157,46 @@ async def test_no_push_when_a_user_edits_the_helper(site):
     assert site.pushes == []
 
 
+# ---- notification bell (persistent_notification): same text as the push, one fixed id -------------------
+
+
+async def test_bell_gets_the_same_text_as_the_push_with_one_fixed_id(site):
+    await live(site)
+    assert len(site.bell) == 1
+    note = site.bell[0]
+    assert note["notification_id"] == "ac_lt2_adaptive"
+    assert note["title"] == site.pushes[0]["title"] == "AC Sharp Tengah: 20 °C · Fan High"
+    assert note["message"] == site.pushes[0]["message"]
+    assert site.notifications == []   # the power-pause notification is a different one
+
+
+async def test_every_setting_reuses_the_same_bell_id_so_it_replaces_the_last_one(site):
+    await live(site)
+    await site.tick(minutes=11)
+    await site.set_count(8)          # a new target for the middle AC
+    await site.tick(minutes=1)
+    await site.switch("ac_lt2_right_control_enabled", True)   # and a first one for another AC
+    assert len(site.bell) == 3
+    assert {n["notification_id"] for n in site.bell} == {"ac_lt2_adaptive"}
+    assert [n["title"] for n in site.bell][-1].startswith("AC LG Kanan")
+
+
+async def test_no_bell_for_the_armed_marker_a_manual_change_or_a_user_edit(site):
+    from homeassistant.core import Context
+    await site.switch(COUNT, True)
+    await site.set_count(2)
+    site.hass.states.async_set("input_text.ac_lt2_middle_last_applied", "22|Low",
+                               context=Context(user_id="user-1"))
+    await site.settle()
+    assert site.bell == []
+    await site.switch(CONTROL, True)   # "armed", then one real setting
+    assert len(site.bell) == 1
+    await site.manual_change(24, "Low")
+    assert len(site.bell) == 1
+    await site.tick(minutes=11)        # same target again: nothing new
+    assert len(site.bell) == 1
+
+
 @pytest.mark.parametrize("unit, climate, name", [
     ("right", "climate.ac_lg_2_2", "LG Kanan"),
 ])

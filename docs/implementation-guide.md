@@ -235,6 +235,8 @@ Tests: `tests/test_dashboard_file.py` runs every JavaScript template with Node (
 
 Tapping a push opens the dashboard. The wording is "dikirim" (sent), because IR cannot confirm that the AC changed.
 
+**HA notification bell.** `ac_lt2_notify_setting_sent` also creates a `persistent_notification` with the same title and text as the push, with the fixed `notification_id: ac_lt2_adaptive` for all three ACs. A new setting therefore **replaces** the previous bell entry, so this feature never occupies more than one slot and other notifications are not buried. The price is that two ACs changing together leave only the last one in the bell; the push, the dashboard timeline and `sensor.ac_lt2_activity` keep the full history. `ac_lt2_check_power` keeps its own, separate notification (control paused).
+
 ## Privacy
 
 Scheduled counts send a camera frame of the room to Google. Staff should be told. Frames are sent straight from the camera and are not stored by the package.
