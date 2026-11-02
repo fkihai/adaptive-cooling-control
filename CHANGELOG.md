@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Dashboard: the "AC menyala" summary tile is replaced by a room temperature and
+  humidity tile at the far right, read from the 2nd Floor Workspace sensor. It
+  shows two 30 px values on one row and only the age of the report ("5 hari
+  yang lalu"), in yellow after 3 hours, or "-" when the sensor is unavailable.
+  No room name and no "data lama" label.
+- Dashboard: the "Orang terbanyak per hari", "Perubahan setelan" and "Tentang
+  data ini" cards are removed from the page. Only the UI changed; the data stays
+  in `sensor.ac_lt2_activity` and the card code stays in the builder, unplaced.
+
 ## [1.1.0] - 2026-11-02
 
 ### Added

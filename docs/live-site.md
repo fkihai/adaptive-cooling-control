@@ -21,7 +21,7 @@ Home Assistant `https://aj9.iotera.cc`, version 2026.7.1, time zone Asia/Jakarta
 
 * The mapping comes from the existing `automation.ac_lt2_*_on_by_power` and `_off_by_power` automations. Verify before relying on it.
 * `climate.ac_lg_2_2` may duplicate `climate.ac_lg` (SmartIR). Confirm which one is used.
-* Every climate entity reports `current_temperature` equal to its target, so it is not a room temperature. The only real temperature sensor found is `sensor.0x84b4dbfffee9c73e_temperature` (26.3 C, room unknown).
+* Every climate entity reports `current_temperature` equal to its target, so it is not a room temperature. The only real temperature sensor found is `sensor.0x84b4dbfffee9c73e_temperature` (26.3 C), an Imou ZTM1 in the area 2nd Floor Workspace (checked 2026-11-02). **It last reported on 2026-10-28 15:04 WIB and its battery sensor reads 0**, so the dashboard tile shows its value as "data lama" until the battery is replaced.
 * Modes and fan names differ per AC. Sharp LT2 kiri and tengah: fan `Auto`, `Low`, `Medium`, `High` (capitalised), 18 to 30 C, step 1. Use each entity's own `fan_modes` list.
 * Existing automations `automation.ac_*_on_by_power` / `_off_by_power` keep helper booleans and selects in sync with the power sensors. Do not change them.
 * Many old `script.ac_*` entries are `unavailable`; ignore them.
@@ -59,7 +59,7 @@ Findings:
 * **The power sensors report about every 10 minutes** (median gap between readings 10 min). A check 2 minutes after a command cannot see a change that quickly. Settled in the pilot: the control script checks power state 15 minutes after a command, and treats a reading as fresh when `last_reported` is younger than 20 minutes (`last_changed` is wrong for this, because an unchanged wattage keeps its old `last_changed`).
 * **Usage (power above 50 W, time-weighted):** Sharp tengah was on 44 h inside Mon-Fri 08:00-17:00 (the work hours at that time) and 32 h outside it, about 15 to 16 h a day on 2026-10-26 to 28, so it is left on into the evening. LG was on 25 h inside work hours and 32 h outside, on 4 of the 6 weekdays in the window (2026-10-22, 23, 26, 27; no power on 28). On 2026-10-29 it was switched on before the live pilot and has been cooling since. Neither ran on the weekend of 2026-10-24 and 25.
 * **Which LG entity is floor 2:** settled on 2026-10-29, it is `climate.ac_lg_2_2` (see the positions table above). The first pilot AC was Sharp tengah; middle and right are both live since 2026-10-29, left stays off.
-* The only room temperature sensor, `sensor.0x84b4dbfffee9c73e_temperature` (26.3 C at 10:15), has an unknown location. Ask the user.
+* The only room temperature sensor, `sensor.0x84b4dbfffee9c73e_temperature`, is in 2nd Floor Workspace (area name, 2026-11-02) and is silent since 2026-10-28 with battery 0.
 
 ## Areas and floors (read 2026-10-29, read-only)
 

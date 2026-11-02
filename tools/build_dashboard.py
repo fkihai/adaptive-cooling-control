@@ -123,13 +123,31 @@ const peopleSub = (occupied ? '<b style="color:#C9D2DF">' + (LEVELS[level] || '-
   (stale ? ' · <span style="color:#F5C46B">data lama</span>' : '');
 const peopleTile = tile('#222B3A', label('Orang di Lantai 2') + big(occupied ? count : 0, null, 'orang') + sub(peopleSub));
 
-const names = active.map((r) => r.u.short).join(' &amp; ');
-const modeSet = Array.from(new Set(active.map((r) => (MODES[r.mode] || [r.mode])[0])));
-const modeText = active.length === 0 ? 'Semua AC mati' : (modeSet.length === 1 ? 'mode ' + modeSet[0] : 'mode campuran');
-const onTile = tile('#222B3A', label('AC menyala') +
-  '<div style="display:flex;align-items:baseline;gap:4px"><span style="font-size:38px;font-weight:600;line-height:1">' + active.length +
-  '</span><span style="font-size:20px;color:#7D8798">/' + rows.length + '</span></div>' +
-  sub((active.length ? names + ' · ' : '') + modeText));
+// Room temperature and humidity (a Zigbee sensor). It reports rarely, so the tile always shows how old the
+// reading is, and the age turns yellow when the reading is old, instead of passing as current.
+const ENV_T = 'sensor.0x84b4dbfffee9c73e_temperature';
+const ENV_H = 'sensor.0x84b4dbfffee9c73e_humidity';
+const ENV_STALE_MIN = 180;
+const envT = bad(st(ENV_T)) ? null : num(st(ENV_T));
+const envH = bad(st(ENV_H)) ? null : num(st(ENV_H));
+const envAt = (id) => { const x = states[id]; const v = x && (x.last_reported || x.last_updated); const t = v ? Date.parse(v) : NaN; return t; };
+const envTimes = [envAt(ENV_T), envAt(ENV_H)].filter((t) => !isNaN(t));
+const envAge = envTimes.length ? Math.max(0, Math.round((Date.now() - Math.max.apply(null, envTimes)) / 60000)) : NaN;
+const envOld = isNaN(envAge) || envAge > ENV_STALE_MIN;
+const ago = (m) => (m < 60 ? m + ' menit' : (m < 2880 ? Math.round(m / 60) + ' jam' : Math.round(m / 1440) + ' hari')) + ' yang lalu';
+const envPart = (v, unit) => '<div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:30px;font-weight:600;line-height:1;color:#E8EDF5">' +
+  (v === null ? '–' : dec(v)) + '</span>' + (v === null ? '' : '<span style="font-size:16px;color:#7D8798">' + unit + '</span>') + '</div>';
+// Just the age ("5 hari yang lalu"); an old reading (over ENV_STALE_MIN) turns the age yellow, no extra words.
+let envSub;
+if (envT === null && envH === null) {
+  envSub = 'Sensor tidak tersedia';
+} else if (isNaN(envAge)) {
+  envSub = '–';
+} else {
+  envSub = envOld ? '<span style="color:#F5C46B">' + ago(envAge) + '</span>' : ago(envAge);
+}
+const envTile = tile('#222B3A', label('Suhu &amp; kelembapan') +
+  '<div style="display:flex;flex-wrap:nowrap;align-items:baseline;gap:6px 16px">' + envPart(envT, '°C') + envPart(envH, '%') + '</div>' + sub(envSub));
 
 const temps = active.map((r) => r.temp).filter((t) => t !== null);
 const avg = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : null;
@@ -152,7 +170,7 @@ if (controlled.length === 0) {
     sub(controlled.map((r) => r.u.short).join(', ')));
 }
 return '<section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">' +
-  peopleTile + onTile + avgTile + ctrlTile + '</section>';
+  peopleTile + avgTile + ctrlTile + envTile + '</section>';
 """
 
 AC_ROW_JS = r"""
@@ -464,12 +482,13 @@ def chart_and_activity():
 
 
 def build():
+    # WEEK_JS (peak per day, settings per AC, "about this data") is kept above but not placed: the user
+    # removed those three cards from the UI on 2026-11-02. The data stays in sensor.ac_lt2_activity.
     sections = [
         {"type": "grid", "column_span": 3, "cards": [html_card(HEADER_JS, update_timer=60000)]},
         {"type": "grid", "column_span": 3, "cards": [html_card(SUMMARY_JS)]},
         {"type": "grid", "column_span": 3, "cards": [html_card(AC_ROW_JS)]},
         {"type": "grid", "column_span": 3, "cards": [chart_and_activity()]},
-        {"type": "grid", "column_span": 3, "cards": [html_card(WEEK_JS, update_timer=300000)]},
     ]
     return {
         "title": "AC Adaptive",

@@ -28,7 +28,11 @@ needs_node = pytest.mark.skipif(NODE is None, reason="node is not installed")
 
 ENTITY_RE = re.compile(r"\b(?:climate|sensor|binary_sensor|input_boolean|input_text|input_number|"
                        r"input_datetime|schedule)\.[a-z0-9_]+")
-SITE_ENTITIES = {"climate.ac_sharp_lt_2_kiri", "climate.ac_sharp_lt_2_tengah", "climate.ac_lg_2_2"}
+# Real devices the test harness does not create (the three ACs and the room temperature/humidity sensor).
+SITE_ENTITIES = {"climate.ac_sharp_lt_2_kiri", "climate.ac_sharp_lt_2_tengah", "climate.ac_lg_2_2",
+                 "sensor.0x84b4dbfffee9c73e_temperature", "sensor.0x84b4dbfffee9c73e_humidity"}
+ENV_T = "sensor.0x84b4dbfffee9c73e_temperature"
+ENV_H = "sensor.0x84b4dbfffee9c73e_humidity"
 FAN_MODES = ["Auto", "Low", "Medium", "High"]
 NOW = "2026-10-30T11:05:00+07:00"
 
@@ -90,6 +94,11 @@ def s(state, **attributes):
     return {"state": state, "attributes": attributes}
 
 
+def reading(state, reported):
+    """A sensor state as button-card sees it: timestamps are top-level fields, not attributes."""
+    return {"state": state, "attributes": {}, "last_reported": reported, "last_updated": reported}
+
+
 def site_states(**over):
     """A believable floor 2: middle and right cooling, left off, 3 people."""
     states = {
@@ -112,6 +121,8 @@ def site_states(**over):
         "sensor.ac_lt2_middle_recommended_setting": s("20|Medium"),
         "sensor.ac_lt2_right_recommended_setting": s("20|Medium"),
         "sensor.ac_lt2_activity": s("0", events=[], sent_by_day={}, people_peak_by_day={}),
+        ENV_T: reading("26.3", "2026-10-30T10:30:00+07:00"),   # 35 minutes before NOW
+        ENV_H: reading("54.53", "2026-10-30T10:30:00+07:00"),
     }
     states.update(over)
     return states
@@ -163,7 +174,7 @@ def test_no_javascript_template_can_reach_a_service():
 
 def test_dashboard_has_the_widgets_that_were_asked_for():
     kinds = [c["type"] for c in cards()]
-    assert kinds.count("custom:button-card") == 7     # outer layout plus six content cards
+    assert kinds.count("custom:button-card") == 6     # outer layout plus five content cards
     assert kinds.count("custom:stack-in-card") == 1   # 24 h chart
     assert kinds.count("custom:apexcharts-card") == 2  # temperature lines and people bars
     assert DASHBOARD["views"][0]["type"] == "sections"
@@ -218,7 +229,7 @@ def test_summary_matches_the_mockup_numbers():
     t = text(run(by_marker("Orang di Lantai 2"), site_states()))
     assert "Orang di Lantai 2 3 orang" in t
     assert "Normal" in t and "dihitung 0 menit lalu" in t
-    assert "AC menyala 2 /3" in t and "Tengah & Kanan" in t and "mode Cool" in t
+    assert "AC menyala" not in t   # replaced by the room temperature and humidity tile
     assert "Setelan rata-rata 19,5 °C" in t
     assert "Kontrol otomatis Mati" in t and "Saran sistem: 20 °C · Medium" in t
 
@@ -231,7 +242,6 @@ def test_summary_when_every_ac_is_off_and_nobody_is_there():
         "climate.ac_lg_2_2": s("off", temperature=19, fan_mode="Low")})
     t = text(run(by_marker("Orang di Lantai 2"), states))
     assert "0 orang" in t and "Tidak ada orang" in t
-    assert "AC menyala 0 /3" in t and "Semua AC mati" in t
     assert "Setelan rata-rata – " in t and "Tidak ada AC menyala" in t
 
 
@@ -377,29 +387,75 @@ def test_activity_timeline_shows_only_six_newest_events():
 
 
 @needs_node
-def test_week_summary_shows_the_peak_sentence_and_totals():
-    activity = s("3", events=[],
-                 people_peak_by_day={"2026-10-29": 5, "2026-10-30": 3},
-                 sent_by_day={"2026-10-29": {"middle": 2, "right": 1}, "2026-10-30": {"middle": 1}})
-    t = text(run(by_marker("Orang terbanyak per hari"), site_states(**{"sensor.ac_lt2_activity": activity})))
-    assert "puncak 5 orang pada Kamis, 29 Okt" in t
-    assert "Kiri 0" in t and "Tengah 3" in t and "Kanan 1" in t
-    assert "4 setelan terkirim dalam 7 hari" in t
-    for label in ("Sab 24", "Min 25", "Sen 26", "Sel 27", "Rab 28", "Kam 29", "Jum 30"):
-        assert label in t, label
+def test_summary_row_order_has_the_room_climate_tile_on_the_far_right():
+    t = text(run(by_marker("Orang di Lantai 2"), site_states()))
+    order = [t.index(x) for x in ("Orang di Lantai 2", "Setelan rata-rata", "Kontrol otomatis", "Suhu & kelembapan")]
+    assert order == sorted(order)
 
 
 @needs_node
-def test_week_summary_without_data():
-    t = text(run(by_marker("Orang terbanyak per hari"), site_states()))
-    assert "belum ada data" in t
-    assert "Tidak ada perubahan setelan dalam 7 hari terakhir" in t
+def test_room_climate_tile_shows_temperature_and_humidity():
+    t = text(run(by_marker("Orang di Lantai 2"), site_states()))
+    assert "Suhu & kelembapan 26,3 °C 54,5 % 35 menit yang lalu" in t
+    tile = t.split("Suhu & kelembapan")[1]
+    assert "2nd Floor Workspace" not in tile and "dilaporkan" not in tile and "data lama" not in tile
 
 
 @needs_node
-def test_week_setting_values_are_centered_in_each_box():
-    html = run(by_marker("Orang terbanyak per hari"), site_states())
-    assert html.count("flex-direction:column;align-items:center;text-align:center") == 3
+def test_room_climate_tile_flags_an_old_reading_with_its_age():
+    old = "2026-10-26T11:05:00+07:00"   # 4 days before NOW; the real sensor last reported on 2026-10-28
+    states = site_states(**{ENV_T: reading("26.3", old), ENV_H: reading("54.53", old)})
+    t = text(run(by_marker("Orang di Lantai 2"), states))
+    tile = t.split("Suhu & kelembapan")[1]
+    assert "26,3 °C" in tile and "54,5 %" in tile      # the old value is still shown, but labelled
+    assert "4 hari yang lalu" in tile and "data lama" not in tile and "2nd Floor Workspace" not in tile
+
+
+@needs_node
+def test_room_climate_tile_prefers_last_reported_over_last_updated():
+    """An unchanged value keeps an old last_updated but still reports; it must not look old."""
+    fresh = {"state": "26.3", "attributes": {}, "last_updated": "2026-10-28T15:04:20+07:00",
+             "last_reported": "2026-10-30T11:00:00+07:00"}
+    t = text(run(by_marker("Orang di Lantai 2"), site_states(**{ENV_T: fresh, ENV_H: fresh})))
+    assert "5 menit yang lalu" in t and "hari yang lalu" not in t
+
+
+@needs_node
+def test_room_climate_tile_colours_only_an_old_age_yellow():
+    old = "2026-10-26T11:05:00+07:00"
+    old_html = run(by_marker("Orang di Lantai 2"), site_states(**{ENV_T: reading("26.3", old), ENV_H: reading("54.5", old)}))
+    fresh_html = run(by_marker("Orang di Lantai 2"), site_states())
+    assert '<span style="color:#F5C46B">4 hari yang lalu</span>' in old_html
+    assert "#F5C46B" not in fresh_html.split("Suhu &amp; kelembapan")[1]
+
+
+@needs_node
+def test_room_climate_values_sit_on_one_row_in_smaller_type():
+    html = run(by_marker("Orang di Lantai 2"), site_states())
+    tile = html.split("Suhu &amp; kelembapan")[1]
+    assert "flex-wrap:nowrap" in tile and "font-size:38px" not in tile
+    assert tile.count("font-size:30px") == 2 and tile.count("font-size:16px") == 2
+
+
+@needs_node
+def test_room_climate_tile_when_the_sensor_is_unavailable_or_missing():
+    for states in (site_states(**{ENV_T: s("unavailable"), ENV_H: s("unavailable")}),
+                   {k: v for k, v in site_states().items() if k not in (ENV_T, ENV_H)}):
+        t = text(run(by_marker("Orang di Lantai 2"), states))
+        tile = t.split("Suhu & kelembapan")[1]
+        assert "Sensor tidak tersedia" in tile and "–" in tile
+        assert "26" not in tile and "54" not in tile
+
+
+def test_the_weekly_cards_are_not_on_the_dashboard_but_the_data_is_still_recorded():
+    """User removed 'Orang terbanyak per hari', 'Perubahan setelan' and 'Tentang data ini' from the UI
+    (2026-11-02). Only the UI: sensor.ac_lt2_activity keeps people_peak_by_day and sent_by_day."""
+    everything = " ".join(body(c) for c in button_cards())
+    for gone in ("Orang terbanyak per hari", "Perubahan setelan", "Tentang data ini"):
+        assert gone not in everything, gone
+    assert "label('AC menyala')" not in everything   # the removed summary tile
+    package = (ROOT / "packages/adaptive_cooling_lt2_control.yaml").read_text(encoding="utf-8")
+    assert "people_peak_by_day" in package and "sent_by_day" in package
 
 
 @needs_node
@@ -441,7 +497,7 @@ def test_every_top_level_card_says_how_wide_it_is():
 def test_chart_and_activity_share_one_responsive_section():
     view = DASHBOARD["views"][0]
     assert view["max_columns"] == 3
-    assert [sec["column_span"] for sec in view["sections"]] == [3, 3, 3, 3, 3]
+    assert [sec["column_span"] for sec in view["sections"]] == [3, 3, 3, 3]
     shared = view["sections"][3]["cards"]
     assert len(shared) == 1
     wrapper = shared[0]
