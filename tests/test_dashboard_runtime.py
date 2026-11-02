@@ -119,6 +119,7 @@ async def test_push_for_a_setting_the_automation_sent(site):
     assert push["title"] == "AC Sharp Tengah: 20 °C · Fan High"
     assert "2 orang" in push["message"]
     assert push["data"]["tag"] == "ac_lt2_middle"
+    assert push["data"]["url"] == "/ac-adaptive-lt2/lantai-2"
     assert float(site.state("input_number.ac_lt2_middle_changes")) == 1
 
 

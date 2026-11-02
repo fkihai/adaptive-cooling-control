@@ -11,11 +11,11 @@ from homeassistant.exceptions import HomeAssistantError
 
 
 class FakeCamera(Camera):
-    def __init__(self):
+    def __init__(self, floor="2nd"):
         super().__init__()
-        self.entity_id = "camera.2nd_floor"
-        self._attr_unique_id = "fake_2nd_floor"
-        self._attr_name = "2nd Floor"
+        self.entity_id = f"camera.{floor}_floor"
+        self._attr_unique_id = f"fake_{floor}_floor"
+        self._attr_name = f"{floor} Floor"
 
     async def async_camera_image(self, width=None, height=None):
         # Not a staff image: a 1x1 JPEG. The AI fake only checks that the file exists.

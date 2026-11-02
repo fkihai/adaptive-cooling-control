@@ -329,9 +329,39 @@ return '<section style="display:grid;grid-template-columns:repeat(auto-fit,minma
 """
 
 
-def html_card(js, update_timer=None, tap=None, grid=None):
+def floor_js(js, floor):
+    """Use the same read-only UI for both floors, with floor-local entities."""
+    if floor == "lt2":
+        return js
+    assert floor == "lt1"
+    js = js.replace("ac_lt2", "ac_lt1").replace("AC LT2", "AC LT1").replace("Lantai 2", "Lantai 1")
+    js = js.replace("ac_adaptive_count_enabled", "ac_adaptive_count_lt1_enabled")
+    js = js.replace("ac_adaptive_hours", "ac_lt1_hours")
+    for old, new in (("climate.ac_sharp_lt_2_kiri", "climate.ac_lg_lt_1_kiri"),
+                     ("climate.ac_sharp_lt_2_tengah", "climate.ac_lg_lt_1_kiri"),
+                     ("climate.ac_lg_2_2", "climate.ac_lg_lt_1_kanan")):
+        js = js.replace(old, new)
+    # Two units, no middle; never point the right AC's card to the left climate entity.
+    middle = "  { k: 'middle', short: 'Tengah', name: 'Sharp Tengah', color: '#4E8CF0',\n" \
+             "    climate: 'climate.ac_lg_lt_1_kiri', status: 'sensor.ac_lt1_middle_status',\n" \
+             "    control: 'input_boolean.ac_lt1_middle_control_enabled', rec: 'sensor.ac_lt1_middle_recommended_setting' },\n"
+    assert middle in js  # never silently leave a third AC on floor 1
+    js = js.replace(middle, "")
+    js = js.replace("sensor.ac_lt1_middle_recommended_temperature", "sensor.ac_lt1_left_recommended_temperature")
+    js = js.replace("name: 'Sharp Kiri'", "name: 'LG Kiri'")
+    # Room climate sensor is physically on floor 2. LT1 has no equivalent:
+    # remove the reads too, not merely the visible tile.
+    if "const ENV_T =" in js:
+        start = js.index("// Room temperature and humidity")
+        end = js.index("const temps =", start)
+        js = js[:start] + js[end:]
+        js = js.replace("peopleTile + avgTile + ctrlTile + envTile", "peopleTile + avgTile + ctrlTile")
+    return js
+
+
+def html_card(js, update_timer=None, tap=None, grid=None, floor="lt2"):
     """A button-card with no entity whose single field returns the HTML built by `js`."""
-    code = "[[[\n" + (PRELUDE + js).strip() + "\n]]]"
+    code = "[[[\n" + floor_js(PRELUDE + js, floor).strip() + "\n]]]"
     card = {
         "type": "custom:button-card",
         # A section is a 12-column grid per column_span; a card that does not say how wide it is gets 12
@@ -394,13 +424,16 @@ def apex(series, yaxis, height, show_x):
     return config
 
 
-def temperature_chart():
+def temperature_chart(floor="lt2"):
     # No end-of-line value labels: they reserved space on the left of the plot and the current
     # values are already shown on the AC cards and the summary tiles above.
     series = []
-    for entity, name, color in (("climate.ac_sharp_lt_2_kiri", "Kiri", "#D47A12"),
-                                ("climate.ac_sharp_lt_2_tengah", "Tengah", "#4E8CF0"),
-                                ("climate.ac_lg_2_2", "Kanan", "#11A37C")):
+    units = (("climate.ac_sharp_lt_2_kiri", "Kiri", "#D47A12"),
+             ("climate.ac_sharp_lt_2_tengah", "Tengah", "#4E8CF0"),
+             ("climate.ac_lg_2_2", "Kanan", "#11A37C")) if floor == "lt2" else (
+             ("climate.ac_lg_lt_1_kiri", "Kiri", "#D47A12"),
+             ("climate.ac_lg_lt_1_kanan", "Kanan", "#11A37C"))
+    for entity, name, color in units:
         series.append({"entity": entity, "attribute": "temperature", "name": name,
                        "curve": "stepline", "color": color})
     chart = apex(series, None, 176, show_x=False)
@@ -415,8 +448,8 @@ def temperature_chart():
     return chart
 
 
-def people_chart():
-    series = [{"entity": "sensor.ac_lt2_people", "name": "Orang", "type": "column", "color": "#8B95A7",
+def people_chart(floor="lt2"):
+    series = [{"entity": f"sensor.ac_{floor}_people", "name": "Orang", "type": "column", "color": "#8B95A7",
                "yaxis_id": "people", "group_by": {"func": "max", "duration": "1h"}}]
     yaxis = [{"id": "people", "min": 0, "max": "~6", "decimals": 0,
               "apex_config": {"tickAmount": 2, "labels": {"minWidth": 36, "maxWidth": 36}}}]
@@ -435,11 +468,11 @@ def people_chart():
     return chart
 
 
-def chart_card():
+def chart_card(floor="lt2"):
     return {
         "type": "custom:stack-in-card",
         "mode": "vertical",
-        "cards": [html_card(CHART_HEAD_JS), temperature_chart(), people_chart()],
+        "cards": [html_card(CHART_HEAD_JS, floor=floor), temperature_chart(floor), people_chart(floor)],
         "card_mod": {"style": ":host { height: 100%; display: block; } "
                               "ha-card { background: #141A24 !important; border: 1px solid #222B3A !important; "
                               "border-radius: 24px !important; box-shadow: none !important; "
@@ -447,9 +480,9 @@ def chart_card():
     }
 
 
-def chart_and_activity():
+def chart_and_activity(floor="lt2"):
     """One full-width card: two columns on desktop, two full-width rows after zoom/mobile."""
-    activity = html_card(ACTIVITY_JS, tap={"action": "navigate", "navigation_path": "/logbook"})
+    activity = html_card(ACTIVITY_JS, tap={"action": "navigate", "navigation_path": "/logbook"}, floor=floor)
     activity["styles"]["card"].extend([{"height": "100%"}, {"box-sizing": "border-box"}])
     activity["styles"]["grid"].append({"height": "100%"})
     activity["styles"]["custom_fields"]["body"].append({"height": "100%"})
@@ -477,7 +510,7 @@ def chart_and_activity():
                         "@container (max-width: 900px) { #container { "
                         "grid-template-areas: 'chart' 'activity' !important; "
                         "grid-template-columns: minmax(0, 1fr) !important; } }",
-        "custom_fields": {"chart": {"card": chart_card()}, "activity": {"card": activity}},
+        "custom_fields": {"chart": {"card": chart_card(floor)}, "activity": {"card": activity}},
     }
 
 
@@ -490,21 +523,27 @@ def build():
         {"type": "grid", "column_span": 3, "cards": [html_card(AC_ROW_JS)]},
         {"type": "grid", "column_span": 3, "cards": [chart_and_activity()]},
     ]
+    floor1 = [
+        {"type": "grid", "column_span": 3, "cards": [html_card(HEADER_JS, update_timer=60000, floor="lt1")]},
+        {"type": "grid", "column_span": 3, "cards": [html_card(SUMMARY_JS, floor="lt1")]},
+        {"type": "grid", "column_span": 3, "cards": [html_card(AC_ROW_JS, floor="lt1")]},
+        {"type": "grid", "column_span": 3, "cards": [chart_and_activity("lt1")]},
+    ]
     return {
         "title": "AC Adaptive",
         # The tab label is the view title (HA shows an icon instead when one is set), so no icon here.
         "views": [{
+            "title": "LT1",
+            "path": "lantai-1",
+            "type": "sections",
+            "max_columns": 3,
+            "sections": floor1,
+        }, {
             "title": "LT2",
             "path": "lantai-2",
             "type": "sections",
             "max_columns": 3,
             "sections": sections,
-        }, {
-            "title": "LT1",
-            "path": "lantai-1",
-            "type": "sections",
-            "max_columns": 3,
-            "sections": [],
         }],
     }
 

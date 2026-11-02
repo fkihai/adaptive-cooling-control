@@ -4,10 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-11-02
 
 ### Added
 
+- Independent Lantai 1 workspace pilot: two LG ACs with their own count and
+  control packages generated from the Lantai 2 rules, separate helpers, work-hours
+  schedule, activity history, phone pushes and per-AC bell IDs. Counting is live
+  (first scheduled answer 5 people at 95% confidence) and LG Kiri control is live;
+  LG Kanan stays off because the unit is off and its power plug is silent.
+- The LT1 tab now has read-only summary, AC cards, 24-hour charts and a change
+  timeline. Its two-unit layout omits the room temperature tile (no LT1 sensor).
+  Added offline tests for the two floors, including a generator drift check.
+- Dashboard tab order is LT1 then LT2. LT1 push notifications open `/lantai-1`
+  and LT2 push notifications and summaries open `/lantai-2` explicitly.
 - A setting sent by the automation is also shown in the Home Assistant
   notification bell, with the same title and text as the phone push. It uses one
   fixed `notification_id` per AC (`ac_lt2_left`, `ac_lt2_middle`,
@@ -120,5 +130,6 @@ First tagged release of the floor 2 pilot.
 - Long dashboard notes wrap instead of being cut off.
 - Test harness sets up the `script` domain so the shared apply script is found.
 
+[1.2.0]: https://gitlab-work/intellivision/adaptive-cooling-control/-/tags/1.2.0
 [1.1.0]: https://gitlab-work/intellivision/adaptive-cooling-control/-/tags/1.1.0
 [1.0.0]: https://gitlab-work/intellivision/adaptive-cooling-control/-/tags/1.0.0

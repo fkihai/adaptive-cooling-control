@@ -93,15 +93,15 @@ class Site:
         await self.call("input_boolean", "turn_on" if on else "turn_off",
                         entity_id=f"input_boolean.{name}")
 
-    async def set_count(self, last, prev=None, age_minutes=0):
+    async def set_count(self, last, prev=None, age_minutes=0, floor="lt2"):
         """Write an accepted count straight into the helpers (no Gemini call)."""
         await self.call("input_number", "set_value",
-                        entity_id="input_number.ac_lt2_count_last", value=last)
+                        entity_id=f"input_number.ac_{floor}_count_last", value=last)
         await self.call("input_number", "set_value",
-                        entity_id="input_number.ac_lt2_count_prev",
+                        entity_id=f"input_number.ac_{floor}_count_prev",
                         value=last if prev is None else prev)
         await self.call("input_datetime", "set_datetime",
-                        entity_id="input_datetime.ac_lt2_count_time",
+                        entity_id=f"input_datetime.ac_{floor}_count_time",
                         timestamp=int((self.now - timedelta(minutes=age_minutes)).timestamp()))
 
     async def power(self, watts=None):
@@ -133,19 +133,28 @@ class Site:
 
 @pytest.fixture
 async def site(hass: HomeAssistant, freezer, tmp_path):
+    return await setup_site(hass, freezer, tmp_path)
+
+
+@pytest.fixture
+async def site_lt1(hass: HomeAssistant, freezer, tmp_path):
+    return await setup_site(hass, freezer, tmp_path, floor="lt1")
+
+
+async def setup_site(hass: HomeAssistant, freezer, tmp_path, floor="lt2"):
     freezer.move_to(START)
     await hass.config.async_set_time_zone("Asia/Jakarta")
     cfg = tmp_path / "config"
     pkgs = cfg / "packages"
     pkgs.mkdir(parents=True)
     shutil.copy(ROOT / "tests/fixtures/configuration.yaml", cfg / "configuration.yaml")
-    for name in ("adaptive_cooling_lt2.yaml", "adaptive_cooling_lt2_control.yaml"):
+    for name in (f"adaptive_cooling_{floor}.yaml", f"adaptive_cooling_{floor}_control.yaml"):
         shutil.copy(ROOT / "packages" / name, pkgs / name)
     hass.config.config_dir = str(cfg)
 
     assert await async_setup_component(hass, "homeassistant", {})
     assert await async_setup_component(hass, "camera", {})
-    await hass.data[CAM_COMPONENT].async_add_entities([FakeCamera()])
+    await hass.data[CAM_COMPONENT].async_add_entities([FakeCamera("1st" if floor == "lt1" else "2nd")])
     assert await async_setup_component(hass, "ai_task", {})
     ai = FakeAI()
     await hass.data[AI_COMPONENT].async_add_entities([ai])
@@ -164,7 +173,8 @@ async def site(hass: HomeAssistant, freezer, tmp_path):
     async def fake_notification(call: ServiceCall):
         # The setting-sent entry in the bell has its own list, so the power-pause tests keep counting only
         # their own notification.
-        if call.data.get("notification_id") in ("ac_lt2_left", "ac_lt2_middle", "ac_lt2_right"):
+        if call.data.get("notification_id") in ("ac_lt2_left", "ac_lt2_middle", "ac_lt2_right",
+                                                "ac_lt1_left", "ac_lt1_right"):
             bell.append(dict(call.data))
         else:
             notifications.append(dict(call.data))
@@ -178,12 +188,23 @@ async def site(hass: HomeAssistant, freezer, tmp_path):
     hass.services.async_register("climate", "set_hvac_mode", fake_climate)
     hass.services.async_register("climate", "turn_off", fake_climate)
     hass.services.async_register("climate", "turn_on", fake_climate)
-    hass.states.async_set(CLIMATE, "cool", {"fan_modes": ["Auto", "Low", "Medium", "High"]})
-    hass.states.async_set(POWER, "1000")
-    hass.states.async_set("climate.ac_lg_2_2", "cool",
-                          {"fan_modes": ["Auto", "Low", "Medium", "High"]})
-    hass.states.async_set("sensor.0x60b763fffe1e67ae_power", "600")
-    hass.states.async_set(FRIGATE, "on")
+    if floor == "lt1":
+        hass.states.async_set("climate.ac_lg_lt_1_kiri", "cool",
+                              {"fan_modes": ["Auto", "Low", "Medium", "High"],
+                               "temperature": 16, "fan_mode": "High"})
+        hass.states.async_set("sensor.0x60b763fffe1e5fc6_power", "700")
+        hass.states.async_set("climate.ac_lg_lt_1_kanan", "off",
+                              {"fan_modes": ["auto", "low", "medium", "high"],
+                               "temperature": 16, "fan_mode": "high"})
+        hass.states.async_set("sensor.0x60b763fffe1e380d_power", "0")
+        hass.states.async_set("binary_sensor.1st_floor_person_occupancy", "on")
+    else:
+        hass.states.async_set(CLIMATE, "cool", {"fan_modes": ["Auto", "Low", "Medium", "High"]})
+        hass.states.async_set(POWER, "1000")
+        hass.states.async_set("climate.ac_lg_2_2", "cool",
+                              {"fan_modes": ["Auto", "Low", "Medium", "High"]})
+        hass.states.async_set("sensor.0x60b763fffe1e67ae_power", "600")
+        hass.states.async_set(FRIGATE, "on")
 
     config = await conf_util.async_hass_config_yaml(hass)
     for domain in ("input_boolean", "input_number", "input_datetime", "input_text",
@@ -192,5 +213,8 @@ async def site(hass: HomeAssistant, freezer, tmp_path):
         assert await async_setup_component(hass, domain, config), domain
     hass.services.async_register("persistent_notification", "create", fake_notification)
     s = Site(hass, freezer, ai, calls, flags, notifications, pushes, bell)
+    if floor == "lt1":
+        from functools import partial
+        s.set_count = partial(s.set_count, floor="lt1")
     await s.settle(8)
     return s

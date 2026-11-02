@@ -685,7 +685,7 @@ automation:
     mode: queued
     variables:
       notify_service: notify.mobile_app_cph2457   # change or add the receiving phone here
-      dashboard_path: /ac-adaptive-lt2
+      dashboard_path: /ac-adaptive-lt2/lantai-2
     triggers:
       - trigger: state
         entity_id:
@@ -744,7 +744,7 @@ automation:
     mode: single
     variables:
       notify_service: notify.mobile_app_cph2457
-      dashboard_path: /ac-adaptive-lt2
+      dashboard_path: /ac-adaptive-lt2/lantai-2
     # Follows schedule.ac_adaptive_hours: five minutes after the work hours of a day end. A day
     # that is not in the schedule never turns it on, so it gets no summary, and no weekday list
     # is kept here.

@@ -30,6 +30,7 @@ ENTITY_RE = re.compile(r"\b(?:climate|sensor|binary_sensor|input_boolean|input_t
                        r"input_datetime|schedule)\.[a-z0-9_]+")
 # Real devices the test harness does not create (the three ACs and the room temperature/humidity sensor).
 SITE_ENTITIES = {"climate.ac_sharp_lt_2_kiri", "climate.ac_sharp_lt_2_tengah", "climate.ac_lg_2_2",
+                 "climate.ac_lg_lt_1_kiri", "climate.ac_lg_lt_1_kanan",
                  "sensor.0x84b4dbfffee9c73e_temperature", "sensor.0x84b4dbfffee9c73e_humidity"}
 ENV_T = "sensor.0x84b4dbfffee9c73e_temperature"
 ENV_H = "sensor.0x84b4dbfffee9c73e_humidity"
@@ -74,10 +75,25 @@ def js(card):
     return code.strip()[3:-3]
 
 
-def by_marker(marker):
-    found = [c for c in button_cards() if marker in body(c)]
+def by_marker(marker, floor=1):
+    found = [c for c in button_cards() if marker in body(c) and c in cards_for_view(floor)]
     assert len(found) == 1, marker
     return found[0]
+
+
+def cards_for_view(index):
+    out = []
+    def add(card):
+        out.append(card)
+        for sub in card.get("cards", []):
+            add(sub)
+        for field in card.get("custom_fields", {}).values():
+            if isinstance(field, dict) and isinstance(field.get("card"), dict):
+                add(field["card"])
+    for section in DASHBOARD["views"][index]["sections"]:
+        for card in section["cards"]:
+            add(card)
+    return out
 
 
 def run(card, states, now=NOW):
@@ -174,19 +190,51 @@ def test_no_javascript_template_can_reach_a_service():
 
 def test_dashboard_has_the_widgets_that_were_asked_for():
     kinds = [c["type"] for c in cards()]
-    assert kinds.count("custom:button-card") == 6     # outer layout plus five content cards
-    assert kinds.count("custom:stack-in-card") == 1   # 24 h chart
-    assert kinds.count("custom:apexcharts-card") == 2  # temperature lines and people bars
+    assert kinds.count("custom:button-card") == 12    # six per floor
+    assert kinds.count("custom:stack-in-card") == 2
+    assert kinds.count("custom:apexcharts-card") == 4
     assert DASHBOARD["views"][0]["type"] == "sections"
 
 
-def test_dashboard_has_an_empty_floor_one_tab_and_keeps_floor_two_first():
+def test_dashboard_has_floor_one_first():
     assert DASHBOARD["title"] == push_dashboard.TITLE == "AC Adaptive"
     # The tab label is the view title; an icon would replace the text in the tab.
-    assert [view["title"] for view in DASHBOARD["views"]] == ["LT2", "LT1"]
-    assert [view["path"] for view in DASHBOARD["views"]] == ["lantai-2", "lantai-1"]
+    assert [view["title"] for view in DASHBOARD["views"]] == ["LT1", "LT2"]
+    assert [view["path"] for view in DASHBOARD["views"]] == ["lantai-1", "lantai-2"]
     assert all("icon" not in view for view in DASHBOARD["views"])
-    assert DASHBOARD["views"][1]["sections"] == []
+    assert len(DASHBOARD["views"][1]["sections"]) == 4
+
+
+@needs_node
+def test_floor_one_cards_only_read_floor_one_entities():
+    view = DASHBOARD["views"][0]
+    templates = [body(c) for c in cards_for_view(0) if c["type"] == "custom:button-card"
+                 and "body" in c.get("custom_fields", {})]
+    assert "AC Lantai 1" in " ".join(templates)
+    assert "sensor.ac_lt1_activity" in " ".join(templates)
+    assert "sensor.ac_lt1_people" in " ".join(templates)
+    assert "ac_lt2" not in " ".join(templates)
+    assert "sensor.0x84b4dbfffee9c73e" not in " ".join(templates)
+    assert "ac_lt1_middle" not in " ".join(templates)
+    assert "climate.ac_lg_lt_1_kiri" in " ".join(templates)
+    assert "climate.ac_lg_lt_1_kanan" in " ".join(templates)
+    chart = view["sections"][3]["cards"][0]["custom_fields"]["chart"]["card"]
+    assert {s["entity"] for s in chart["cards"][1]["series"]} == {
+        "climate.ac_lg_lt_1_kiri", "climate.ac_lg_lt_1_kanan"}
+    assert chart["cards"][2]["series"][0]["entity"] == "sensor.ac_lt1_people"
+    assert "Suhu &amp; kelembapan" not in run(view["sections"][1]["cards"][0], {})
+
+
+@needs_node
+def test_floor_one_uses_same_theme_and_two_ac_cards():
+    view = DASHBOARD["views"][0]
+    ac = view["sections"][2]["cards"][0]
+    # With absent entities, both LGs are shown safely as off; no third (middle) card.
+    html = run(ac, {})
+    assert html.count("<article ") == 2
+    assert "#141A24" in html
+    assert "LG Kiri" in html and "LG Kanan" in html
+    assert "Sharp" not in html
 
 
 # ---- entities --------------------------------------------------------------------------------
@@ -199,7 +247,10 @@ async def test_every_entity_in_the_dashboard_exists(site):
         if card["type"] == "custom:apexcharts-card":
             names |= {x["entity"] for x in card["series"]}
     assert "sensor.ac_lt2_activity" in names and "sensor.ac_lt2_people" in names
-    missing = sorted(n for n in names if site.hass.states.get(n) is None and n not in SITE_ENTITIES)
+    # The LT1 packages have their own runtime tests. This fixture installs LT2 only.
+    missing = sorted(n for n in names if site.hass.states.get(n) is None and n not in SITE_ENTITIES
+                     and not n.startswith(("sensor.ac_lt1_", "binary_sensor.ac_lt1_", "input_boolean.ac_lt1_", "schedule.ac_lt1_"))
+                     and n != "input_boolean.ac_adaptive_count_lt1_enabled")
     assert missing == []
 
 
@@ -495,7 +546,7 @@ def test_every_top_level_card_says_how_wide_it_is():
 
 
 def test_chart_and_activity_share_one_responsive_section():
-    view = DASHBOARD["views"][0]
+    view = DASHBOARD["views"][1]
     assert view["max_columns"] == 3
     assert [sec["column_span"] for sec in view["sections"]] == [3, 3, 3, 3]
     shared = view["sections"][3]["cards"]

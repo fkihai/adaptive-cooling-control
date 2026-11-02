@@ -23,7 +23,11 @@ def check():
 
     failed = 0
     for files in (("adaptive_cooling_lt2.yaml",),
-                  ("adaptive_cooling_lt2.yaml", "adaptive_cooling_lt2_control.yaml")):
+                  ("adaptive_cooling_lt2.yaml", "adaptive_cooling_lt2_control.yaml"),
+                  ("adaptive_cooling_lt1.yaml",),
+                  ("adaptive_cooling_lt1.yaml", "adaptive_cooling_lt1_control.yaml"),
+                  ("adaptive_cooling_lt1.yaml", "adaptive_cooling_lt1_control.yaml",
+                   "adaptive_cooling_lt2.yaml", "adaptive_cooling_lt2_control.yaml")):
         print("== " + " + ".join(files), flush=True)
         with tempfile.TemporaryDirectory() as tmp:
             cfg = Path(tmp) / "homeassistant"

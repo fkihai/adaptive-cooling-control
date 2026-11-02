@@ -5,6 +5,418 @@
 # on this page can change an AC. Pushed to HA by tools/push_dashboard.py (needs --confirm).
 title: AC Adaptive
 views:
+- title: LT1
+  path: lantai-1
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    column_span: 3
+    cards:
+    - type: custom:button-card
+      grid_options:
+        columns: full
+        rows: auto
+      show_name: false
+      show_icon: false
+      show_state: false
+      show_label: false
+      show_ripple: false
+      custom_fields:
+        body: "[[[\nconst ACC = '#5CC8FF';\nconst st = (id) => { const s = states[id]; return s ? s.state : undefined; };\nconst at = (id, k) => { const s = states[id]; return (s && s.attributes) ? s.attributes[k] : undefined; };\nconst bad = (v) => v === undefined || v === null || v === 'unknown' || v === 'unavailable';\nconst esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst pad = (n) => String(n).padStart(2, '0');\nconst dayKey = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());\nconst DOW = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];\nconst MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];\nconst UNITS = [\n  { k: 'left', short: 'Kiri', name: 'LG Kiri', color: '#D47A12',\n    climate: 'climate.ac_lg_lt_1_kiri', status: 'sensor.ac_lt1_left_status',\n    control: 'input_boolean.ac_lt1_left_control_enabled', rec: 'sensor.ac_lt1_left_recommended_setting'\
+          \ },\n  { k: 'right', short: 'Kanan', name: 'LG Kanan', color: '#11A37C',\n    climate: 'climate.ac_lg_lt_1_kanan', status: 'sensor.ac_lt1_right_status',\n    control: 'input_boolean.ac_lt1_right_control_enabled', rec: 'sensor.ac_lt1_right_recommended_setting' }\n];\nconst MODES = {\n  auto: ['Auto', 'M6 19 12 5l6 14M8.5 14h7'],\n  cool: ['Cool', 'M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 4.5 12 7l2.5-2.5M9.5 19.5 12 17l2.5 2.5'],\n  dry: ['Dry', 'M12 3.5s-6 6.8-6 10.9a6 6 0 0 0 12 0c0-4.1-6-10.9-6-10.9z'],\n  fan_only: ['Fan only', 'M3 9h11a3 3 0 1 0-3-3M3 13h15a3 3 0 1 1-3 3M3 17h6'],\n  heat: ['Heat', 'M12 3c3 4 5 6 5 9a5 5 0 0 1-10 0c0-3 2-5 5-9z'],\n  off: ['Off', 'M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0']\n};\nconst FANS = {\n  Auto: 'M6 19 12 5l6 14M8.5 14h7', Low: 'M6 19v-3',\n  Medium: 'M6 19v-3M12 19v-7', High: 'M6 19v-3M12 19v-7M18 19v-11'\n};\nconst icon = (d, color, w) => '<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"' + color +\n  '\" stroke-width=\"\
+          ' + (w || 2) + '\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"' + d + '\"></path></svg>';\nconst isOff = (v) => bad(v) || v === 'off';\nconst num = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };\nconst dec = (n) => Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');\nconst CARD = 'background:#141A24;border:1px solid #222B3A;border-radius:24px;box-sizing:border-box;';\n\nconst counting = st('input_boolean.ac_adaptive_count_lt1_enabled') === 'on';\nconst hours = st('schedule.ac_lt1_hours') === 'on';\nconst occupied = st('binary_sensor.ac_lt1_occupied') === 'on';\nconst d = new Date();\nconst stamp = DOW[d.getDay()] + ', ' + d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear() +\n  ' · ' + pad(d.getHours()) + ':' + pad(d.getMinutes());\nconst chip = (svg, text) => '<span style=\"display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;' +\n  'border-radius:999px;background:#141A24;border:1px\
+          \ solid #222B3A;font-size:13px;color:#C9D2DF;white-space:nowrap\">' +\n  svg + text + '</span>';\nconst people = '<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"' + (counting ? '#7EE2B0' : '#9AA6B8') +\n  '\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"9\" cy=\"8\" r=\"3.5\"></circle><path d=\"M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.5a6.5 6.5 0 0 1 3 5.5\"></path></svg>';\nconst clock = '<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"' + (hours ? '#7EE2B0' : '#9AA6B8') +\n  '\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M12 7v5l3 2\"></path></svg>';\nconst room = '<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"' + (occupied ? '#7EE2B0' : '#9AA6B8') +\n  '\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 11l9-7 9 7v9H3z\"\
+          ></path></svg>';\nreturn '<header style=\"display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:4px 0 0\">' +\n  '<span style=\"font-size:30px;font-weight:600;letter-spacing:-0.02em;line-height:1.1;color:#E8EDF5\">AC Lantai 1</span>' +\n  '<div style=\"display:flex;flex-wrap:wrap;gap:8px;align-items:center\">' +\n  chip(people, counting ? 'Hitung orang aktif' : 'Hitung orang mati') +\n  chip(clock, hours ? 'Jam kerja 07–18' : 'Di luar jam kerja 07–18') +\n  chip(room, occupied ? 'Terisi' : 'Kosong') +\n  chip('', stamp) + '</div></header>';\n]]]"
+      styles:
+        card:
+        - background: transparent
+        - border: none
+        - box-shadow: none
+        - padding: '0'
+        - border-radius: '0'
+        - overflow: visible
+        grid:
+        - grid-template-areas: '"body"'
+        - grid-template-columns: 1fr
+        - grid-template-rows: 1fr
+        custom_fields:
+          body:
+          - width: 100%
+          - text-align: left
+          - font-family: inherit
+          - white-space: normal
+          - overflow: visible
+          - text-overflow: clip
+          - line-height: '1.35'
+      tap_action:
+        action: none
+      hold_action:
+        action: none
+      double_tap_action:
+        action: none
+      update_timer: 60000
+  - type: grid
+    column_span: 3
+    cards:
+    - type: custom:button-card
+      grid_options:
+        columns: full
+        rows: auto
+      show_name: false
+      show_icon: false
+      show_state: false
+      show_label: false
+      show_ripple: false
+      custom_fields:
+        body: "[[[\nconst ACC = '#5CC8FF';\nconst st = (id) => { const s = states[id]; return s ? s.state : undefined; };\nconst at = (id, k) => { const s = states[id]; return (s && s.attributes) ? s.attributes[k] : undefined; };\nconst bad = (v) => v === undefined || v === null || v === 'unknown' || v === 'unavailable';\nconst esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst pad = (n) => String(n).padStart(2, '0');\nconst dayKey = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());\nconst DOW = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];\nconst MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];\nconst UNITS = [\n  { k: 'left', short: 'Kiri', name: 'LG Kiri', color: '#D47A12',\n    climate: 'climate.ac_lg_lt_1_kiri', status: 'sensor.ac_lt1_left_status',\n    control: 'input_boolean.ac_lt1_left_control_enabled', rec: 'sensor.ac_lt1_left_recommended_setting'\
+          \ },\n  { k: 'right', short: 'Kanan', name: 'LG Kanan', color: '#11A37C',\n    climate: 'climate.ac_lg_lt_1_kanan', status: 'sensor.ac_lt1_right_status',\n    control: 'input_boolean.ac_lt1_right_control_enabled', rec: 'sensor.ac_lt1_right_recommended_setting' }\n];\nconst MODES = {\n  auto: ['Auto', 'M6 19 12 5l6 14M8.5 14h7'],\n  cool: ['Cool', 'M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 4.5 12 7l2.5-2.5M9.5 19.5 12 17l2.5 2.5'],\n  dry: ['Dry', 'M12 3.5s-6 6.8-6 10.9a6 6 0 0 0 12 0c0-4.1-6-10.9-6-10.9z'],\n  fan_only: ['Fan only', 'M3 9h11a3 3 0 1 0-3-3M3 13h15a3 3 0 1 1-3 3M3 17h6'],\n  heat: ['Heat', 'M12 3c3 4 5 6 5 9a5 5 0 0 1-10 0c0-3 2-5 5-9z'],\n  off: ['Off', 'M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0']\n};\nconst FANS = {\n  Auto: 'M6 19 12 5l6 14M8.5 14h7', Low: 'M6 19v-3',\n  Medium: 'M6 19v-3M12 19v-7', High: 'M6 19v-3M12 19v-7M18 19v-11'\n};\nconst icon = (d, color, w) => '<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"' + color +\n  '\" stroke-width=\"\
+          ' + (w || 2) + '\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"' + d + '\"></path></svg>';\nconst isOff = (v) => bad(v) || v === 'off';\nconst num = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };\nconst dec = (n) => Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');\nconst CARD = 'background:#141A24;border:1px solid #222B3A;border-radius:24px;box-sizing:border-box;';\n\nconst occupied = st('binary_sensor.ac_lt1_occupied') === 'on';\nconst count = parseInt(st('sensor.ac_lt1_people'), 10) || 0;\nconst level = at('sensor.ac_lt1_left_recommended_temperature', 'level_name');\nconst age = parseInt(at('sensor.ac_lt1_people', 'last_count_age_minutes'), 10);\nconst stale = st('binary_sensor.ac_lt1_count_stale') === 'on';\nconst LEVELS = { empty: 'Kosong', few: 'Sedikit', normal: 'Normal', busy: 'Ramai' };\nconst rows = UNITS.map((u) => {\n  const s = states[u.climate];\n  return { u: u, mode: s ? s.state : undefined,\
+          \ temp: num(at(u.climate, 'temperature')),\n           control: st(u.control) === 'on', rec: st(u.rec) };\n});\nconst active = rows.filter((r) => !isOff(r.mode));\nconst controlled = rows.filter((r) => r.control);\nconst tile = (border, inner) => '<div style=\"' + CARD.replace('border:1px solid #222B3A', 'border:1px solid ' + border) +\n  'border-radius:20px;padding:18px 20px;display:flex;flex-direction:column;gap:8px\">' + inner + '</div>';\nconst label = (t) => '<span style=\"font-size:13px;color:#9AA6B8\">' + t + '</span>';\nconst big = (t, color, unit) => '<div style=\"display:flex;align-items:baseline;gap:6px\"><span style=\"font-size:38px;font-weight:600;line-height:1;color:' +\n  (color || '#E8EDF5') + '\">' + t + '</span>' + (unit ? '<span style=\"font-size:18px;color:#7D8798\">' + unit + '</span>' : '') + '</div>';\nconst sub = (t) => '<span style=\"font-size:13px;color:#9AA6B8\">' + t + '</span>';\n\nconst peopleSub = (occupied ? '<b style=\"color:#C9D2DF\">' + (LEVELS[level]\
+          \ || '-') + '</b>' : 'Tidak ada orang') +\n  (isNaN(age) ? '' : ' · dihitung ' + age + ' menit lalu') +\n  (stale ? ' · <span style=\"color:#F5C46B\">data lama</span>' : '');\nconst peopleTile = tile('#222B3A', label('Orang di Lantai 1') + big(occupied ? count : 0, null, 'orang') + sub(peopleSub));\n\nconst temps = active.map((r) => r.temp).filter((t) => t !== null);\nconst avg = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : null;\nconst avgTile = tile('#222B3A', label('Setelan rata-rata') +\n  big(avg === null ? '–' : dec(avg), null, avg === null ? '' : '°C') +\n  sub(avg === null ? 'Tidak ada AC menyala' : 'Dari AC yang menyala'));\n\nconst pick = rows.find((r) => !isOff(r.mode) && !r.control) || rows[1];\nconst recParts = (pick && !bad(pick.rec) && pick.rec.indexOf('|') > 0) ? pick.rec.split('|') : null;\nconst warn = '<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#F5B544\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"\
+          round\"><path d=\"M12 3 2.5 20h19L12 3zM12 10v4M12 17.2v.1\"></path></svg>';\nlet ctrlTile;\nif (controlled.length === 0) {\n  ctrlTile = tile('#3A2F1A', '<span style=\"display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#9AA6B8\">' + warn + 'Kontrol otomatis</span>' +\n    big('Mati', '#F5C46B') +\n    sub(recParts ? 'Saran sistem: <b style=\"color:#E8EDF5\">' + esc(recParts[0]) + ' °C · ' + esc(recParts[1]) + '</b>' : 'Belum ada saran'));\n} else {\n  ctrlTile = tile('#222B3A', label('Kontrol otomatis') +\n    '<div style=\"display:flex;align-items:baseline;gap:4px\"><span style=\"font-size:38px;font-weight:600;line-height:1;color:#7EE2B0\">' + controlled.length +\n    '</span><span style=\"font-size:20px;color:#7D8798\">/' + rows.length + '</span></div>' +\n    sub(controlled.map((r) => r.u.short).join(', ')));\n}\nreturn '<section style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px\">' +\n  peopleTile + avgTile + ctrlTile +\
+          \ '</section>';\n]]]"
+      styles:
+        card:
+        - background: transparent
+        - border: none
+        - box-shadow: none
+        - padding: '0'
+        - border-radius: '0'
+        - overflow: visible
+        grid:
+        - grid-template-areas: '"body"'
+        - grid-template-columns: 1fr
+        - grid-template-rows: 1fr
+        custom_fields:
+          body:
+          - width: 100%
+          - text-align: left
+          - font-family: inherit
+          - white-space: normal
+          - overflow: visible
+          - text-overflow: clip
+          - line-height: '1.35'
+      tap_action:
+        action: none
+      hold_action:
+        action: none
+      double_tap_action:
+        action: none
+  - type: grid
+    column_span: 3
+    cards:
+    - type: custom:button-card
+      grid_options:
+        columns: full
+        rows: auto
+      show_name: false
+      show_icon: false
+      show_state: false
+      show_label: false
+      show_ripple: false
+      custom_fields:
+        body: "[[[\nconst ACC = '#5CC8FF';\nconst st = (id) => { const s = states[id]; return s ? s.state : undefined; };\nconst at = (id, k) => { const s = states[id]; return (s && s.attributes) ? s.attributes[k] : undefined; };\nconst bad = (v) => v === undefined || v === null || v === 'unknown' || v === 'unavailable';\nconst esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst pad = (n) => String(n).padStart(2, '0');\nconst dayKey = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());\nconst DOW = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];\nconst MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];\nconst UNITS = [\n  { k: 'left', short: 'Kiri', name: 'LG Kiri', color: '#D47A12',\n    climate: 'climate.ac_lg_lt_1_kiri', status: 'sensor.ac_lt1_left_status',\n    control: 'input_boolean.ac_lt1_left_control_enabled', rec: 'sensor.ac_lt1_left_recommended_setting'\
+          \ },\n  { k: 'right', short: 'Kanan', name: 'LG Kanan', color: '#11A37C',\n    climate: 'climate.ac_lg_lt_1_kanan', status: 'sensor.ac_lt1_right_status',\n    control: 'input_boolean.ac_lt1_right_control_enabled', rec: 'sensor.ac_lt1_right_recommended_setting' }\n];\nconst MODES = {\n  auto: ['Auto', 'M6 19 12 5l6 14M8.5 14h7'],\n  cool: ['Cool', 'M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 4.5 12 7l2.5-2.5M9.5 19.5 12 17l2.5 2.5'],\n  dry: ['Dry', 'M12 3.5s-6 6.8-6 10.9a6 6 0 0 0 12 0c0-4.1-6-10.9-6-10.9z'],\n  fan_only: ['Fan only', 'M3 9h11a3 3 0 1 0-3-3M3 13h15a3 3 0 1 1-3 3M3 17h6'],\n  heat: ['Heat', 'M12 3c3 4 5 6 5 9a5 5 0 0 1-10 0c0-3 2-5 5-9z'],\n  off: ['Off', 'M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0']\n};\nconst FANS = {\n  Auto: 'M6 19 12 5l6 14M8.5 14h7', Low: 'M6 19v-3',\n  Medium: 'M6 19v-3M12 19v-7', High: 'M6 19v-3M12 19v-7M18 19v-11'\n};\nconst icon = (d, color, w) => '<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"' + color +\n  '\" stroke-width=\"\
+          ' + (w || 2) + '\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"' + d + '\"></path></svg>';\nconst isOff = (v) => bad(v) || v === 'off';\nconst num = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };\nconst dec = (n) => Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');\nconst CARD = 'background:#141A24;border:1px solid #222B3A;border-radius:24px;box-sizing:border-box;';\n\nconst geom = (t) => {\n  const f = Math.max(0, Math.min(1, (t - 16) / 14));\n  const a = (135 + 270 * f) * Math.PI / 180;\n  return { dash: (433.54 * f).toFixed(1) + ' 578.05', kx: (110 + 92 * Math.cos(a)).toFixed(1), ky: (110 + 92 * Math.sin(a)).toFixed(1) };\n};\nconst cards = UNITS.map((u) => {\n  const s = states[u.climate];\n  const mode = s ? s.state : undefined;\n  const a = (s && s.attributes) || {};\n  const note = st(u.status);\n  const off = isOff(mode);\n  const t = num(a.temperature);\n  const g = (!off && t !== null) ? geom(t) :\
+          \ { dash: '0 578.05', kx: 0, ky: 0 };\n  const m = MODES[mode] || [bad(mode) ? 'N/A' : mode, MODES.off[1]];\n  const modeLabel = off ? 'OFF' : m[0].toUpperCase();\n  const fanName = bad(a.fan_mode) ? null : a.fan_mode;\n  const pill = '<span style=\"display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.08em;flex:none;' +\n    (off ? 'background:#1C2330;color:#9AA6B8' : 'background:rgba(92,200,255,0.12);color:#A9E4FF') + '\">' + icon(m[1], off ? '#9AA6B8' : ACC, 2.2) + modeLabel + '</span>';\n  const center = off\n    ? '<span style=\"font-size:40px;font-weight:500;color:#9AA6B8;line-height:1.1\">Mati</span>'\n    : '<div style=\"display:flex;align-items:flex-start;line-height:1\"><span style=\"font-size:50px;font-weight:500;letter-spacing:-0.03em;color:#E8EDF5\">' +\n      (t === null ? '–' : dec(t)) + '</span><span style=\"font-size:18px;font-weight:500;color:#9AA6B8;margin-top:6px\">°C</span></div>';\n\
+          \  const knob = off ? '' : '<circle cx=\"' + g.kx + '\" cy=\"' + g.ky + '\" r=\"9\" fill=\"#0B0F16\" stroke=\"#E8EDF5\" stroke-width=\"3\"></circle>';\n  const glow = off ? '' : '<circle cx=\"110\" cy=\"110\" r=\"92\" fill=\"none\" stroke=\"' + ACC + '\" stroke-width=\"14\" stroke-linecap=\"round\" stroke-dasharray=\"' +\n    g.dash + '\" transform=\"rotate(135 110 110)\" style=\"filter:drop-shadow(0 0 10px rgba(92,200,255,0.55))\"></circle>';\n  const showNote = !bad(note) && note !== 'ok';\n  return '<article style=\"' + CARD + 'padding:16px 18px;display:flex;flex-direction:column;gap:10px;white-space:normal\">' +\n    '<div style=\"display:flex;align-items:flex-start;justify-content:space-between;gap:10px\">' +\n    '<div style=\"display:flex;align-items:center;gap:10px;min-width:0\">' +\n    '<svg width=\"10\" height=\"10\" viewBox=\"0 0 10 10\" style=\"flex:none\"><circle cx=\"5\" cy=\"5\" r=\"5\" fill=\"' + u.color + '\"></circle></svg>' +\n    '<div style=\"display:flex;flex-direction:column;gap:2px;min-width:0\"\
+          ><span style=\"font-size:16px;font-weight:600;color:#E8EDF5\">' + u.name + '</span>' +\n    '<span style=\"font-size:10px;color:#8E9AAD;word-break:break-all\">' + u.climate + '</span></div></div>' + pill + '</div>' +\n    '<div style=\"position:relative;width:170px;height:170px;align-self:center\">' +\n    '<svg width=\"170\" height=\"170\" viewBox=\"0 0 220 220\" style=\"overflow:visible\">' +\n    '<circle cx=\"110\" cy=\"110\" r=\"92\" fill=\"none\" stroke=\"#222B3A\" stroke-width=\"14\" stroke-linecap=\"round\" stroke-dasharray=\"433.54 578.05\" transform=\"rotate(135 110 110)\"></circle>' +\n    glow + knob +\n    '<text x=\"46\" y=\"205\" fill=\"#7D8798\" font-size=\"13\" text-anchor=\"middle\">16°</text>' +\n    '<text x=\"174\" y=\"205\" fill=\"#7D8798\" font-size=\"13\" text-anchor=\"middle\">30°</text></svg>' +\n    '<div style=\"position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px\">' +\n    '<span style=\"font-size:10px;font-weight:700;letter-spacing:0.16em;color:#8E9AAD\"\
+          >' + modeLabel + '</span>' + center +\n    (fanName ? '<span style=\"font-size:12px;color:#9AA6B8\">Fan ' + esc(fanName) + '</span>' : '') + '</div></div>' +\n    (showNote ? '<div style=\"display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:12px;background:#1A1710;border:1px solid #3A2F1A;font-size:12px;line-height:1.4;color:#E8D9B8\">' +\n      '<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#F5B544\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"flex:none;margin-top:1px\"><path d=\"M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9\"></path></svg>' +\n      '<span style=\"min-width:0\">' + esc(note) + '</span></div>' : '') +\n    '</article>';\n});\nreturn '<section style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;white-space:normal\">' + cards.join('') + '</section>';\n]]]"
+      styles:
+        card:
+        - background: transparent
+        - border: none
+        - box-shadow: none
+        - padding: '0'
+        - border-radius: '0'
+        - overflow: visible
+        grid:
+        - grid-template-areas: '"body"'
+        - grid-template-columns: 1fr
+        - grid-template-rows: 1fr
+        custom_fields:
+          body:
+          - width: 100%
+          - text-align: left
+          - font-family: inherit
+          - white-space: normal
+          - overflow: visible
+          - text-overflow: clip
+          - line-height: '1.35'
+      tap_action:
+        action: none
+      hold_action:
+        action: none
+      double_tap_action:
+        action: none
+  - type: grid
+    column_span: 3
+    cards:
+    - type: custom:button-card
+      grid_options:
+        columns: full
+        rows: auto
+      show_name: false
+      show_icon: false
+      show_state: false
+      show_ripple: false
+      tap_action:
+        action: none
+      hold_action:
+        action: none
+      double_tap_action:
+        action: none
+      styles:
+        card:
+        - background: transparent
+        - border: '0'
+        - box-shadow: none
+        - padding: '0'
+        - overflow: visible
+        grid:
+        - grid-template-areas: '"chart activity"'
+        - grid-template-columns: minmax(0, 2fr) minmax(0, 1fr)
+        - grid-template-rows: auto
+        - gap: 12px
+        - align-items: stretch
+        custom_fields:
+          chart:
+          - min-width: '0'
+          - height: 100%
+          activity:
+          - min-width: '0'
+          - height: 100%
+      extra_styles: 'ha-card { container-type: inline-size; } @container (max-width: 900px) { #container { grid-template-areas: ''chart'' ''activity'' !important; grid-template-columns: minmax(0, 1fr) !important; } }'
+      custom_fields:
+        chart:
+          card:
+            type: custom:stack-in-card
+            mode: vertical
+            cards:
+            - type: custom:button-card
+              grid_options:
+                columns: full
+                rows: auto
+              show_name: false
+              show_icon: false
+              show_state: false
+              show_label: false
+              show_ripple: false
+              custom_fields:
+                body: "[[[\nconst ACC = '#5CC8FF';\nconst st = (id) => { const s = states[id]; return s ? s.state : undefined; };\nconst at = (id, k) => { const s = states[id]; return (s && s.attributes) ? s.attributes[k] : undefined; };\nconst bad = (v) => v === undefined || v === null || v === 'unknown' || v === 'unavailable';\nconst esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst pad = (n) => String(n).padStart(2, '0');\nconst dayKey = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());\nconst DOW = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];\nconst MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];\nconst UNITS = [\n  { k: 'left', short: 'Kiri', name: 'LG Kiri', color: '#D47A12',\n    climate: 'climate.ac_lg_lt_1_kiri', status: 'sensor.ac_lt1_left_status',\n    control: 'input_boolean.ac_lt1_left_control_enabled', rec: 'sensor.ac_lt1_left_recommended_setting'\
+                  \ },\n  { k: 'right', short: 'Kanan', name: 'LG Kanan', color: '#11A37C',\n    climate: 'climate.ac_lg_lt_1_kanan', status: 'sensor.ac_lt1_right_status',\n    control: 'input_boolean.ac_lt1_right_control_enabled', rec: 'sensor.ac_lt1_right_recommended_setting' }\n];\nconst MODES = {\n  auto: ['Auto', 'M6 19 12 5l6 14M8.5 14h7'],\n  cool: ['Cool', 'M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 4.5 12 7l2.5-2.5M9.5 19.5 12 17l2.5 2.5'],\n  dry: ['Dry', 'M12 3.5s-6 6.8-6 10.9a6 6 0 0 0 12 0c0-4.1-6-10.9-6-10.9z'],\n  fan_only: ['Fan only', 'M3 9h11a3 3 0 1 0-3-3M3 13h15a3 3 0 1 1-3 3M3 17h6'],\n  heat: ['Heat', 'M12 3c3 4 5 6 5 9a5 5 0 0 1-10 0c0-3 2-5 5-9z'],\n  off: ['Off', 'M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0']\n};\nconst FANS = {\n  Auto: 'M6 19 12 5l6 14M8.5 14h7', Low: 'M6 19v-3',\n  Medium: 'M6 19v-3M12 19v-7', High: 'M6 19v-3M12 19v-7M18 19v-11'\n};\nconst icon = (d, color, w) => '<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"' + color +\n\
+                  \  '\" stroke-width=\"' + (w || 2) + '\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"' + d + '\"></path></svg>';\nconst isOff = (v) => bad(v) || v === 'off';\nconst num = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };\nconst dec = (n) => Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');\nconst CARD = 'background:#141A24;border:1px solid #222B3A;border-radius:24px;box-sizing:border-box;';\n\nconst legend = UNITS.map((u) => '<span style=\"display:inline-flex;align-items:center;gap:6px\"><svg width=\"14\" height=\"4\" viewBox=\"0 0 14 4\"><rect width=\"14\" height=\"4\" rx=\"2\" fill=\"' +\n  u.color + '\"></rect></svg>' + u.short + '</span>').join('');\nreturn '<div style=\"display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px\">' +\n  '<div style=\"display:flex;flex-direction:column;gap:4px\"><span style=\"font-size:17px;font-weight:600;color:#E8EDF5\">Suhu setelan AC &amp;\
+                  \ jumlah orang</span>' +\n  '<span style=\"font-size:12px;color:#8E9AAD\">24 jam terakhir · perintah terakhir lewat IR</span></div>' +\n  '<div style=\"display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#C9D2DF\">' + legend +\n  '<span style=\"display:inline-flex;align-items:center;gap:6px\"><svg width=\"10\" height=\"10\" viewBox=\"0 0 10 10\"><rect width=\"10\" height=\"10\" rx=\"2\" fill=\"#8B95A7\"></rect></svg>Orang</span></div></div>';\n]]]"
+              styles:
+                card:
+                - background: transparent
+                - border: none
+                - box-shadow: none
+                - padding: '0'
+                - border-radius: '0'
+                - overflow: visible
+                grid:
+                - grid-template-areas: '"body"'
+                - grid-template-columns: 1fr
+                - grid-template-rows: 1fr
+                custom_fields:
+                  body:
+                  - width: 100%
+                  - text-align: left
+                  - font-family: inherit
+                  - white-space: normal
+                  - overflow: visible
+                  - text-overflow: clip
+                  - line-height: '1.35'
+              tap_action:
+                action: none
+              hold_action:
+                action: none
+              double_tap_action:
+                action: none
+            - type: custom:apexcharts-card
+              graph_span: 24h
+              update_delay: 3s
+              header:
+                show: false
+              hours_12: false
+              show:
+                loading: false
+              all_series_config:
+                stroke_width: 2
+              apex_config:
+                chart:
+                  height: 176
+                  background: transparent
+                  foreColor: '#7D8798'
+                  toolbar:
+                    show: false
+                  parentHeightOffset: 0
+                legend:
+                  show: false
+                grid:
+                  borderColor: '#222B3A'
+                  strokeDashArray: 0
+                  padding:
+                    left: 4
+                    right: 8
+                    top: 0
+                    bottom: 0
+                xaxis:
+                  labels:
+                    show: false
+                  axisBorder:
+                    show: false
+                  axisTicks:
+                    show: false
+                tooltip:
+                  theme: dark
+                yaxis:
+                  min: 16
+                  max: 30
+                  tickAmount: 7
+                  decimalsInFloat: 0
+                  labels:
+                    minWidth: 36
+                    maxWidth: 36
+                    formatter: 'EVAL:function(v) { return [16,20,24,28].includes(Math.round(v)) ? Math.round(v) + ''°'' : ''''; }'
+              series:
+              - entity: climate.ac_lg_lt_1_kiri
+                attribute: temperature
+                name: Kiri
+                curve: stepline
+                color: '#D47A12'
+              - entity: climate.ac_lg_lt_1_kanan
+                attribute: temperature
+                name: Kanan
+                curve: stepline
+                color: '#11A37C'
+              card_mod:
+                style: 'ha-card { background: transparent !important; border: 0 !important; --ha-card-border-width: 0px; box-shadow: none !important; padding: 0 !important; }'
+            - type: custom:apexcharts-card
+              graph_span: 24h
+              update_delay: 3s
+              header:
+                show: false
+              hours_12: false
+              show:
+                loading: false
+              all_series_config:
+                stroke_width: 2
+              apex_config:
+                chart:
+                  height: 150
+                  background: transparent
+                  foreColor: '#7D8798'
+                  toolbar:
+                    show: false
+                  parentHeightOffset: 0
+                legend:
+                  show: false
+                grid:
+                  borderColor: '#222B3A'
+                  strokeDashArray: 0
+                  padding:
+                    left: 4
+                    right: 8
+                    top: 0
+                    bottom: 9
+                xaxis:
+                  labels:
+                    show: true
+                    style:
+                      fontSize: 12px
+                      colors: '#A9B8CC'
+                    offsetY: 3
+                    hideOverlappingLabels: true
+                    format: HH:mm
+                  axisBorder:
+                    show: false
+                  axisTicks:
+                    show: false
+                tooltip:
+                  theme: dark
+                plotOptions:
+                  bar:
+                    columnWidth: 65%
+                    borderRadius: 3
+              series:
+              - entity: sensor.ac_lt1_people
+                name: Orang
+                type: column
+                color: '#8B95A7'
+                yaxis_id: people
+                group_by:
+                  func: max
+                  duration: 1h
+              card_mod:
+                style: 'ha-card { background: transparent !important; border: 0 !important; --ha-card-border-width: 0px; box-shadow: none !important; padding: 0 !important; }'
+              yaxis:
+              - id: people
+                min: 0
+                max: ~6
+                decimals: 0
+                apex_config:
+                  tickAmount: 2
+                  labels:
+                    minWidth: 36
+                    maxWidth: 36
+            card_mod:
+              style: ':host { height: 100%; display: block; } ha-card { background: #141A24 !important; border: 1px solid #222B3A !important; border-radius: 24px !important; box-shadow: none !important; padding: 14px 14px 18px !important; height: 100%; box-sizing: border-box; }'
+        activity:
+          card:
+            type: custom:button-card
+            grid_options:
+              columns: full
+              rows: auto
+            show_name: false
+            show_icon: false
+            show_state: false
+            show_label: false
+            show_ripple: false
+            custom_fields:
+              body: "[[[[\nconst ACC = '#5CC8FF';\nconst st = (id) => { const s = states[id]; return s ? s.state : undefined; };\nconst at = (id, k) => { const s = states[id]; return (s && s.attributes) ? s.attributes[k] : undefined; };\nconst bad = (v) => v === undefined || v === null || v === 'unknown' || v === 'unavailable';\nconst esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst pad = (n) => String(n).padStart(2, '0');\nconst dayKey = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());\nconst DOW = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];\nconst MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];\nconst UNITS = [\n  { k: 'left', short: 'Kiri', name: 'LG Kiri', color: '#D47A12',\n    climate: 'climate.ac_lg_lt_1_kiri', status: 'sensor.ac_lt1_left_status',\n    control: 'input_boolean.ac_lt1_left_control_enabled', rec: 'sensor.ac_lt1_left_recommended_setting'\
+                \ },\n  { k: 'right', short: 'Kanan', name: 'LG Kanan', color: '#11A37C',\n    climate: 'climate.ac_lg_lt_1_kanan', status: 'sensor.ac_lt1_right_status',\n    control: 'input_boolean.ac_lt1_right_control_enabled', rec: 'sensor.ac_lt1_right_recommended_setting' }\n];\nconst MODES = {\n  auto: ['Auto', 'M6 19 12 5l6 14M8.5 14h7'],\n  cool: ['Cool', 'M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 4.5 12 7l2.5-2.5M9.5 19.5 12 17l2.5 2.5'],\n  dry: ['Dry', 'M12 3.5s-6 6.8-6 10.9a6 6 0 0 0 12 0c0-4.1-6-10.9-6-10.9z'],\n  fan_only: ['Fan only', 'M3 9h11a3 3 0 1 0-3-3M3 13h15a3 3 0 1 1-3 3M3 17h6'],\n  heat: ['Heat', 'M12 3c3 4 5 6 5 9a5 5 0 0 1-10 0c0-3 2-5 5-9z'],\n  off: ['Off', 'M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0']\n};\nconst FANS = {\n  Auto: 'M6 19 12 5l6 14M8.5 14h7', Low: 'M6 19v-3',\n  Medium: 'M6 19v-3M12 19v-7', High: 'M6 19v-3M12 19v-7M18 19v-11'\n};\nconst icon = (d, color, w) => '<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"' + color +\n \
+                \ '\" stroke-width=\"' + (w || 2) + '\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"' + d + '\"></path></svg>';\nconst isOff = (v) => bad(v) || v === 'off';\nconst num = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };\nconst dec = (n) => Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');\nconst CARD = 'background:#141A24;border:1px solid #222B3A;border-radius:24px;box-sizing:border-box;';\n\nconst events = at('sensor.ac_lt1_activity', 'events') || [];\nconst MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];\nconst todayKey = dayKey(new Date());\n// An event without a stored day (older data) counts as today.\nconst dayLabel = (key) => {\n  const m = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(key);\n  if (!m) { return key; }\n  const x = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));\n  const date = x.getDate()\
+                \ + ' ' + MONTHS[x.getMonth()] + ' ' + x.getFullYear();\n  return (key === todayKey ? 'Hari ini' : DOW[x.getDay()]) + ' · ' + date;\n};\nconst U = {};\nUNITS.forEach((u) => { U[u.k] = u; });\nconst describe = (e) => {\n  if (e.kind === 'sent') {\n    const p = String(e.value).split('|');\n    return ['Perintah dikirim', p[0] + '° · ' + (p[1] || '')];\n  }\n  if (e.kind === 'manual') { return ['Perubahan manual', 'Manual']; }\n  return ['Kontrol otomatis', e.value === 'on' ? 'On' : 'Off'];\n};\nconst item = (e) => {\n  const u = U[e.unit] || { short: e.unit, color: '#8B95A7' };\n  const x = describe(e);\n  return '<li style=\"display:flex;gap:12px\"><div style=\"display:flex;flex-direction:column;align-items:center;width:12px\">' +\n    '<svg width=\"12\" height=\"12\" viewBox=\"0 0 12 12\" style=\"margin-top:4px\"><circle cx=\"6\" cy=\"6\" r=\"4.5\" fill=\"#141A24\" stroke=\"' + u.color + '\" stroke-width=\"3\"></circle></svg>' +\n    '<div style=\"flex:1;width:2px;background:#222B3A;margin-top:4px\"\
+                ></div></div>' +\n    '<div style=\"flex:1;display:flex;justify-content:space-between;gap:10px;padding-bottom:14px\">' +\n    '<div style=\"display:flex;flex-direction:column;gap:2px\"><span style=\"font-size:14px;font-weight:600;color:#E8EDF5\">AC LT1 ' + esc(u.short) + '</span>' +\n    '<span style=\"font-size:12px;color:#8E9AAD\">' + x[0] + '</span></div>' +\n    '<div style=\"display:flex;flex-direction:column;align-items:flex-end;gap:2px\"><span style=\"font-size:14px;font-weight:600;color:#E8EDF5\">' + esc(x[1]) + '</span>' +\n    '<span style=\"font-size:11px;color:#7D8798\">' + esc(e.time) + '</span></div></div></li>';\n};\nconst groups = [];\nevents.slice(0, 6).forEach((e) => {\n  const key = e.day || todayKey;\n  const last = groups[groups.length - 1];\n  if (last && last.key === key) { last.items.push(item(e)); } else { groups.push({ key: key, items: [item(e)] }); }\n});\nconst sections = groups.map((g) => '<div style=\"display:flex;flex-direction:column;gap:10px\"\
+                >' +\n  '<div style=\"font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8E9AAD\">' + esc(dayLabel(g.key)) + '</div>' +\n  '<ol style=\"list-style:none;margin:0;padding:0;display:flex;flex-direction:column\">' + g.items.join('') + '</ol></div>');\nreturn '<div style=\"' + CARD + 'padding:20px;display:flex;flex-direction:column;gap:14px;height:100%\">' +\n  '<div style=\"display:flex;justify-content:space-between;align-items:center;gap:10px\"><div style=\"display:flex;flex-direction:column;gap:2px\">' +\n  '<span style=\"font-size:17px;font-weight:600;color:#E8EDF5\">Aktivitas perubahan setelan</span>' +\n  '<span style=\"font-size:12px;color:#8E9AAD\">Perubahan terbaru</span></div>' +\n  '<span style=\"display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:12px;background:#1C2330;color:#C9D2DF\">' +\n  '<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"\
+                2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 6l6 6-6 6\"></path></svg></span></div>' +\n  (sections.length ? sections.join('')\n    : '<span style=\"font-size:13px;color:#8E9AAD;line-height:1.5\">Belum ada perubahan tercatat.</span>') +\n  '</div>';\n]]]]"
+            styles:
+              card:
+              - background: transparent
+              - border: none
+              - box-shadow: none
+              - padding: '0'
+              - border-radius: '0'
+              - overflow: visible
+              - cursor: pointer
+              - height: 100%
+              - box-sizing: border-box
+              grid:
+              - grid-template-areas: '"body"'
+              - grid-template-columns: 1fr
+              - grid-template-rows: 1fr
+              - height: 100%
+              custom_fields:
+                body:
+                - width: 100%
+                - text-align: left
+                - font-family: inherit
+                - white-space: normal
+                - overflow: visible
+                - text-overflow: clip
+                - line-height: '1.35'
+                - height: 100%
+            tap_action:
+              action: navigate
+              navigation_path: /logbook
+            hold_action:
+              action: none
+            double_tap_action:
+              action: none
+            extra_styles: ':host { display: block; height: 100%; }'
 - title: LT2
   path: lantai-2
   type: sections
@@ -73,7 +485,7 @@ views:
           \ },\n  { k: 'middle', short: 'Tengah', name: 'Sharp Tengah', color: '#4E8CF0',\n    climate: 'climate.ac_sharp_lt_2_tengah', status: 'sensor.ac_lt2_middle_status',\n    control: 'input_boolean.ac_lt2_middle_control_enabled', rec: 'sensor.ac_lt2_middle_recommended_setting' },\n  { k: 'right', short: 'Kanan', name: 'LG Kanan', color: '#11A37C',\n    climate: 'climate.ac_lg_2_2', status: 'sensor.ac_lt2_right_status',\n    control: 'input_boolean.ac_lt2_right_control_enabled', rec: 'sensor.ac_lt2_right_recommended_setting' }\n];\nconst MODES = {\n  auto: ['Auto', 'M6 19 12 5l6 14M8.5 14h7'],\n  cool: ['Cool', 'M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 4.5 12 7l2.5-2.5M9.5 19.5 12 17l2.5 2.5'],\n  dry: ['Dry', 'M12 3.5s-6 6.8-6 10.9a6 6 0 0 0 12 0c0-4.1-6-10.9-6-10.9z'],\n  fan_only: ['Fan only', 'M3 9h11a3 3 0 1 0-3-3M3 13h15a3 3 0 1 1-3 3M3 17h6'],\n  heat: ['Heat', 'M12 3c3 4 5 6 5 9a5 5 0 0 1-10 0c0-3 2-5 5-9z'],\n  off: ['Off', 'M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0']\n};\nconst\
           \ FANS = {\n  Auto: 'M6 19 12 5l6 14M8.5 14h7', Low: 'M6 19v-3',\n  Medium: 'M6 19v-3M12 19v-7', High: 'M6 19v-3M12 19v-7M18 19v-11'\n};\nconst icon = (d, color, w) => '<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"' + color +\n  '\" stroke-width=\"' + (w || 2) + '\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"' + d + '\"></path></svg>';\nconst isOff = (v) => bad(v) || v === 'off';\nconst num = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };\nconst dec = (n) => Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');\nconst CARD = 'background:#141A24;border:1px solid #222B3A;border-radius:24px;box-sizing:border-box;';\n\nconst occupied = st('binary_sensor.ac_lt2_occupied') === 'on';\nconst count = parseInt(st('sensor.ac_lt2_people'), 10) || 0;\nconst level = at('sensor.ac_lt2_middle_recommended_temperature', 'level_name');\nconst age = parseInt(at('sensor.ac_lt2_people', 'last_count_age_minutes'),\
           \ 10);\nconst stale = st('binary_sensor.ac_lt2_count_stale') === 'on';\nconst LEVELS = { empty: 'Kosong', few: 'Sedikit', normal: 'Normal', busy: 'Ramai' };\nconst rows = UNITS.map((u) => {\n  const s = states[u.climate];\n  return { u: u, mode: s ? s.state : undefined, temp: num(at(u.climate, 'temperature')),\n           control: st(u.control) === 'on', rec: st(u.rec) };\n});\nconst active = rows.filter((r) => !isOff(r.mode));\nconst controlled = rows.filter((r) => r.control);\nconst tile = (border, inner) => '<div style=\"' + CARD.replace('border:1px solid #222B3A', 'border:1px solid ' + border) +\n  'border-radius:20px;padding:18px 20px;display:flex;flex-direction:column;gap:8px\">' + inner + '</div>';\nconst label = (t) => '<span style=\"font-size:13px;color:#9AA6B8\">' + t + '</span>';\nconst big = (t, color, unit) => '<div style=\"display:flex;align-items:baseline;gap:6px\"><span style=\"font-size:38px;font-weight:600;line-height:1;color:' +\n  (color || '#E8EDF5') + '\"\
-          >' + t + '</span>' + (unit ? '<span style=\"font-size:18px;color:#7D8798\">' + unit + '</span>' : '') + '</div>';\nconst sub = (t) => '<span style=\"font-size:13px;color:#9AA6B8\">' + t + '</span>';\n\nconst peopleSub = (occupied ? '<b style=\"color:#C9D2DF\">' + (LEVELS[level] || '-') + '</b>' : 'Tidak ada orang') +\n  (isNaN(age) ? '' : ' · dihitung ' + age + ' menit lalu') +\n  (stale ? ' · <span style=\"color:#F5C46B\">data lama</span>' : '');\nconst peopleTile = tile('#222B3A', label('Orang di Lantai 2') + big(occupied ? count : 0, null, 'orang') + sub(peopleSub));\n\n// Room temperature and humidity (a Zigbee sensor in the 2nd Floor Workspace). It reports rarely, so an\n// old reading is shown with its age and a \"data lama\" label instead of passing as current.\nconst ENV_T = 'sensor.0x84b4dbfffee9c73e_temperature';\nconst ENV_H = 'sensor.0x84b4dbfffee9c73e_humidity';\nconst ENV_STALE_MIN = 180;\nconst envT = bad(st(ENV_T)) ? null : num(st(ENV_T));\nconst envH = bad(st(ENV_H))\
+          >' + t + '</span>' + (unit ? '<span style=\"font-size:18px;color:#7D8798\">' + unit + '</span>' : '') + '</div>';\nconst sub = (t) => '<span style=\"font-size:13px;color:#9AA6B8\">' + t + '</span>';\n\nconst peopleSub = (occupied ? '<b style=\"color:#C9D2DF\">' + (LEVELS[level] || '-') + '</b>' : 'Tidak ada orang') +\n  (isNaN(age) ? '' : ' · dihitung ' + age + ' menit lalu') +\n  (stale ? ' · <span style=\"color:#F5C46B\">data lama</span>' : '');\nconst peopleTile = tile('#222B3A', label('Orang di Lantai 2') + big(occupied ? count : 0, null, 'orang') + sub(peopleSub));\n\n// Room temperature and humidity (a Zigbee sensor). It reports rarely, so the tile always shows how old the\n// reading is, and the age turns yellow when the reading is old, instead of passing as current.\nconst ENV_T = 'sensor.0x84b4dbfffee9c73e_temperature';\nconst ENV_H = 'sensor.0x84b4dbfffee9c73e_humidity';\nconst ENV_STALE_MIN = 180;\nconst envT = bad(st(ENV_T)) ? null : num(st(ENV_T));\nconst envH = bad(st(ENV_H))\
           \ ? null : num(st(ENV_H));\nconst envAt = (id) => { const x = states[id]; const v = x && (x.last_reported || x.last_updated); const t = v ? Date.parse(v) : NaN; return t; };\nconst envTimes = [envAt(ENV_T), envAt(ENV_H)].filter((t) => !isNaN(t));\nconst envAge = envTimes.length ? Math.max(0, Math.round((Date.now() - Math.max.apply(null, envTimes)) / 60000)) : NaN;\nconst envOld = isNaN(envAge) || envAge > ENV_STALE_MIN;\nconst ago = (m) => (m < 60 ? m + ' menit' : (m < 2880 ? Math.round(m / 60) + ' jam' : Math.round(m / 1440) + ' hari')) + ' yang lalu';\nconst envPart = (v, unit) => '<div style=\"display:flex;align-items:baseline;gap:5px\"><span style=\"font-size:30px;font-weight:600;line-height:1;color:#E8EDF5\">' +\n  (v === null ? '–' : dec(v)) + '</span>' + (v === null ? '' : '<span style=\"font-size:16px;color:#7D8798\">' + unit + '</span>') + '</div>';\n// Just the age (\"5 hari yang lalu\"); an old reading (over ENV_STALE_MIN) turns the age yellow, no extra words.\nlet envSub;\n\
           if (envT === null && envH === null) {\n  envSub = 'Sensor tidak tersedia';\n} else if (isNaN(envAge)) {\n  envSub = '–';\n} else {\n  envSub = envOld ? '<span style=\"color:#F5C46B\">' + ago(envAge) + '</span>' : ago(envAge);\n}\nconst envTile = tile('#222B3A', label('Suhu &amp; kelembapan') +\n  '<div style=\"display:flex;flex-wrap:nowrap;align-items:baseline;gap:6px 16px\">' + envPart(envT, '°C') + envPart(envH, '%') + '</div>' + sub(envSub));\n\nconst temps = active.map((r) => r.temp).filter((t) => t !== null);\nconst avg = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : null;\nconst avgTile = tile('#222B3A', label('Setelan rata-rata') +\n  big(avg === null ? '–' : dec(avg), null, avg === null ? '' : '°C') +\n  sub(avg === null ? 'Tidak ada AC menyala' : 'Dari AC yang menyala'));\n\nconst pick = rows.find((r) => !isOff(r.mode) && !r.control) || rows[1];\nconst recParts = (pick && !bad(pick.rec) && pick.rec.indexOf('|') > 0) ? pick.rec.split('|') : null;\nconst\
           \ warn = '<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#F5B544\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 3 2.5 20h19L12 3zM12 10v4M12 17.2v.1\"></path></svg>';\nlet ctrlTile;\nif (controlled.length === 0) {\n  ctrlTile = tile('#3A2F1A', '<span style=\"display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#9AA6B8\">' + warn + 'Kontrol otomatis</span>' +\n    big('Mati', '#F5C46B') +\n    sub(recParts ? 'Saran sistem: <b style=\"color:#E8EDF5\">' + esc(recParts[0]) + ' °C · ' + esc(recParts[1]) + '</b>' : 'Belum ada saran'));\n} else {\n  ctrlTile = tile('#222B3A', label('Kontrol otomatis') +\n    '<div style=\"display:flex;align-items:baseline;gap:4px\"><span style=\"font-size:38px;font-weight:600;line-height:1;color:#7EE2B0\">' + controlled.length +\n    '</span><span style=\"font-size:20px;color:#7D8798\">/' + rows.length + '</span></div>' +\n    sub(controlled.map((r) => r.u.short).join(',\
@@ -425,8 +837,3 @@ views:
             double_tap_action:
               action: none
             extra_styles: ':host { display: block; height: 100%; }'
-- title: LT1
-  path: lantai-1
-  type: sections
-  max_columns: 3
-  sections: []
