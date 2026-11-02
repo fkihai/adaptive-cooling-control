@@ -724,13 +724,15 @@ automation:
             tag: "ac_lt2_{{ unit }}"
             clickAction: "{{ dashboard_path }}"
             url: "{{ dashboard_path }}"
-      # The same text in the HA notification bell. One fixed notification_id for all three units, so a new
-      # setting replaces the previous one instead of adding to it and the other notifications in the bell are
-      # not buried under this feature's.
+      # The same text in the HA notification bell. One fixed notification_id per unit (ac_lt2_left, _middle,
+      # _right): a new setting of the same unit replaces its previous entry (and its "x minutes ago" restarts),
+      # so this feature never holds more than three entries and the other notifications are not buried. One id
+      # for all three units was tried first and dropped: the middle and right units change in the same second,
+      # so only the last one stayed visible.
       - action: persistent_notification.create
         continue_on_error: true
         data:
-          notification_id: ac_lt2_adaptive
+          notification_id: "ac_lt2_{{ unit }}"
           title: "AC {{ ac_name }}: {{ temperature }} °C · Fan {{ fan }}"
           message: >-
             Setelan dikirim pukul {{ now().strftime('%H:%M') }} untuk

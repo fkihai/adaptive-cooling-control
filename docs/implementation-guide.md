@@ -235,7 +235,7 @@ Tests: `tests/test_dashboard_file.py` runs every JavaScript template with Node (
 
 Tapping a push opens the dashboard. The wording is "dikirim" (sent), because IR cannot confirm that the AC changed.
 
-**HA notification bell.** `ac_lt2_notify_setting_sent` also creates a `persistent_notification` with the same title and text as the push, with the fixed `notification_id: ac_lt2_adaptive` for all three ACs. A new setting therefore **replaces** the previous bell entry, so this feature never occupies more than one slot and other notifications are not buried. The price is that two ACs changing together leave only the last one in the bell; the push, the dashboard timeline and `sensor.ac_lt2_activity` keep the full history. `ac_lt2_check_power` keeps its own, separate notification (control paused).
+**HA notification bell.** `ac_lt2_notify_setting_sent` also creates a `persistent_notification` with the same title and text as the push, with one fixed `notification_id` per AC: `ac_lt2_left`, `ac_lt2_middle`, `ac_lt2_right`. A new setting of the same AC **replaces** that AC's bell entry (Home Assistant gives it a new creation time, so its "x minutes ago" restarts), so this feature never holds more than three entries and other notifications are not buried. The AC that did not change keeps its own entry and its own time. A single id for all three was tried first and dropped on 2026-11-02, because the middle and right units change in the same second and only the last stayed visible. `ac_lt2_check_power` keeps its own, separate notification (control paused).
 
 ## Privacy
 

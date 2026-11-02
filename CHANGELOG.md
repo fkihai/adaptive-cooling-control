@@ -10,8 +10,9 @@ All notable changes to this project are documented here. The format follows
 
 - A setting sent by the automation is also shown in the Home Assistant
   notification bell, with the same title and text as the phone push. It uses one
-  fixed `notification_id` (`ac_lt2_adaptive`) for all three ACs, so a new setting
-  replaces the previous entry and other notifications are not buried. Nothing is
+  fixed `notification_id` per AC (`ac_lt2_left`, `ac_lt2_middle`,
+  `ac_lt2_right`), so a new setting of an AC replaces that AC's entry (and its
+  time) and other notifications are not buried by more than three entries. Nothing is
   shown for `armed`, a manual change or a user's own edit.
 
 ### Changed

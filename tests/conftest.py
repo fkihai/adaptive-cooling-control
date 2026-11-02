@@ -45,7 +45,7 @@ class Site:
         self.calls = calls  # (service, data) for every fake climate call
         self.flags = flags  # flags["fail_temperature"]: make set_temperature raise
         self.notifications = notifications  # persistent_notification.create data, except the bell entry below
-        self.bell = bell if bell is not None else []  # notification_id ac_lt2_adaptive: one entry per setting sent
+        self.bell = bell if bell is not None else []  # notification ids ac_lt2_left/_middle/_right: one entry per setting sent
         self.pushes = pushes if pushes is not None else []  # notify.mobile_app_cph2457 data
         self.now = START
         self._tick = 0
@@ -164,7 +164,7 @@ async def site(hass: HomeAssistant, freezer, tmp_path):
     async def fake_notification(call: ServiceCall):
         # The setting-sent entry in the bell has its own list, so the power-pause tests keep counting only
         # their own notification.
-        if call.data.get("notification_id") == "ac_lt2_adaptive":
+        if call.data.get("notification_id") in ("ac_lt2_left", "ac_lt2_middle", "ac_lt2_right"):
             bell.append(dict(call.data))
         else:
             notifications.append(dict(call.data))

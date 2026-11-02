@@ -157,28 +157,40 @@ async def test_no_push_when_a_user_edits_the_helper(site):
     assert site.pushes == []
 
 
-# ---- notification bell (persistent_notification): same text as the push, one fixed id -------------------
+# ---- notification bell (persistent_notification): same text as the push, one fixed id per AC ------------
 
 
-async def test_bell_gets_the_same_text_as_the_push_with_one_fixed_id(site):
+async def test_bell_gets_the_same_text_as_the_push_with_the_units_own_id(site):
     await live(site)
     assert len(site.bell) == 1
     note = site.bell[0]
-    assert note["notification_id"] == "ac_lt2_adaptive"
+    assert note["notification_id"] == "ac_lt2_middle"
     assert note["title"] == site.pushes[0]["title"] == "AC Sharp Tengah: 20 °C · Fan High"
     assert note["message"] == site.pushes[0]["message"]
     assert site.notifications == []   # the power-pause notification is a different one
 
 
-async def test_every_setting_reuses_the_same_bell_id_so_it_replaces_the_last_one(site):
+async def test_two_acs_changing_together_both_stay_in_the_bell(site):
+    """2026-11-02 12:40: middle and right changed in the same second and only the last was visible."""
+    await site.switch(COUNT, True)
+    await site.set_count(2)
+    await site.switch(CONTROL, True)
+    await site.switch("ac_lt2_right_control_enabled", True)
+    by_id = {n["notification_id"]: n["title"] for n in site.bell}
+    assert by_id == {"ac_lt2_middle": "AC Sharp Tengah: 20 °C · Fan High",
+                     "ac_lt2_right": "AC LG Kanan: 20 °C · Fan High"}
+
+
+async def test_a_new_setting_of_one_ac_reuses_that_acs_id_and_leaves_the_others(site):
     await live(site)
+    await site.switch("ac_lt2_right_control_enabled", True)
     await site.tick(minutes=11)
-    await site.set_count(8)          # a new target for the middle AC
+    await site.set_count(8)          # busy: new targets, both ACs
     await site.tick(minutes=1)
-    await site.switch("ac_lt2_right_control_enabled", True)   # and a first one for another AC
-    assert len(site.bell) == 3
-    assert {n["notification_id"] for n in site.bell} == {"ac_lt2_adaptive"}
-    assert [n["title"] for n in site.bell][-1].startswith("AC LG Kanan")
+    ids = [n["notification_id"] for n in site.bell]
+    assert ids.count("ac_lt2_middle") == 2 and ids.count("ac_lt2_right") == 2   # same id again: replaced
+    assert set(ids) == {"ac_lt2_middle", "ac_lt2_right"}                         # never more than one id per AC
+    assert site.bell[-1]["title"].endswith("18 °C · Fan High")
 
 
 async def test_no_bell_for_the_armed_marker_a_manual_change_or_a_user_edit(site):

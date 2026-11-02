@@ -68,10 +68,10 @@ Each entry: the decision, the evidence, and what would change it. Dates are abso
 
 ## 2026-11-02: notification bell entry for a sent setting, one fixed id
 
-* **Decision (user):** when `ac_lt2_notify_setting_sent` sends a setting it also creates a Home Assistant notification (the bell) with the same title and text as the phone push. No new automation or id for the automation: one more action in the existing one. `notification_id` is the fixed `ac_lt2_adaptive` for all three ACs, so each new setting replaces the previous entry.
-* **Why one id:** the user does not want the other notifications in the bell buried by this feature's. One id means at most one entry, whatever the number of changes.
-* **Cost:** if two ACs change together only the last is visible in the bell. The push (one tag per AC), the timeline and `sensor.ac_lt2_activity` keep the complete history. A per-AC id (three entries) was offered and not chosen.
-* **Would change it if:** staff miss a change because another AC's replaced it; then use `ac_lt2_<unit>` ids (max three entries).
+* **Decision (user):** when `ac_lt2_notify_setting_sent` sends a setting it also creates a Home Assistant notification (the bell) with the same title and text as the phone push. No new automation or id for the automation: one more action in the existing one. `notification_id` is `ac_lt2_<unit>` (`ac_lt2_left`, `ac_lt2_middle`, `ac_lt2_right`), so each new setting of an AC replaces that AC's previous entry and restarts its "x minutes ago".
+* **History:** the first version used one fixed id `ac_lt2_adaptive` for all three ACs, to keep the bell to one entry. The same day, the live bell showed only "AC LG Kanan" after the middle and right units changed in the same second (12:40:12 WIB, a pair that repeats at nearly every change), because the right unit's entry replaced the middle's. Home Assistant stamps a new creation time on every create with the same id, so per-AC ids also give each AC its own correct time. The user chose per-AC ids.
+* **Cost:** up to three entries in the bell, a fixed number that does not grow. The other notifications are still not buried.
+* **Would change it if:** three entries are still too many; then one id with a combined message (one line per AC with its own time) is the alternative, at the cost of a single "x minutes ago" for all.
 
 ## 2026-10-29: per-unit switches restore their last state (no `initial:`)
 
