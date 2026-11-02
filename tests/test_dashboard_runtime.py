@@ -174,12 +174,23 @@ async def test_daily_summary_after_work_hours_resets_the_counters(site):
     await live(site)
     assert float(site.state("input_number.ac_lt2_middle_changes")) == 1
     before = len(site.pushes)
-    await site.at(datetime(2026, 10, 29, 18, 4, tzinfo=LOCAL))
-    await site.at(datetime(2026, 10, 29, 18, 5, 5, tzinfo=LOCAL))
+    # The summary follows the schedule: it goes out 5 minutes after the work hours end (18:00).
+    await site.at(datetime(2026, 10, 29, 18, 0, 5, tzinfo=LOCAL))
+    assert site.state("schedule.ac_adaptive_hours") == "off"
+    assert not [p for p in site.pushes[before:] if p["data"]["tag"] == "ac_lt2_daily"]
+    await site.at(datetime(2026, 10, 29, 18, 5, 10, tzinfo=LOCAL))
     summary = [p for p in site.pushes[before:] if p["data"]["tag"] == "ac_lt2_daily"]
     assert len(summary) == 1
     assert "Tengah 1x" in summary[0]["message"]
     assert float(site.state("input_number.ac_lt2_middle_changes")) == 0
+
+
+async def test_no_daily_summary_on_a_day_outside_the_schedule(site):
+    """Which days get a summary is decided only by the schedule: Saturday is not in it."""
+    await live(site)
+    before = len(site.pushes)
+    await site.at(datetime(2026, 10, 31, 18, 5, 10, tzinfo=LOCAL))  # Saturday
+    assert not [p for p in site.pushes[before:] if p["data"]["tag"] == "ac_lt2_daily"]
 
 
 # ---- activity sensor (timeline and 7-day summary) --------------------------------------------
@@ -241,3 +252,28 @@ async def test_activity_drops_days_older_than_seven(site):
     peaks = attrs(site)["people_peak_by_day"]
     assert "2026-10-29" not in peaks
     assert peaks["2026-11-06"] <= 5  # a day only keeps the highest value it saw
+
+
+# ---- the daily peak counts only inside the schedule, with a fresh count ----------------------
+
+
+async def test_peak_ignores_a_stale_count_shown_outside_work_hours(site):
+    """2026-10-31 (Saturday): Frigate saw someone and ac_lt2_people showed Friday's count of 1."""
+    await site.set_count(1)
+    await site.at(datetime(2026, 10, 31, 10, 10, tzinfo=LOCAL))  # Saturday, not in the schedule
+    assert site.state("schedule.ac_adaptive_hours") == "off"
+    site.hass.states.async_set(FRIGATE, "on")
+    await site.settle()
+    assert site.state("sensor.ac_lt2_people") == "1"           # the sensor still shows the old count
+    assert attrs(site)["people_peak_by_day"].get("2026-10-31", 0) == 0
+
+
+async def test_peak_ignores_an_old_count_inside_work_hours(site):
+    await site.set_count(5, age_minutes=40)
+    await site.settle()
+    assert attrs(site)["people_peak_by_day"].get("2026-10-29", 0) == 0
+
+
+async def test_peak_counts_a_fresh_count_inside_work_hours(site):
+    await site.set_count(4)
+    assert attrs(site)["people_peak_by_day"]["2026-10-29"] == 4

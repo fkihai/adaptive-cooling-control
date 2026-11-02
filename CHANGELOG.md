@@ -6,16 +6,40 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-02
+
 ### Added
 
 - `ac_lt2_manual_resume` turns a unit's control switch back on after a manual
   Home Assistant change, inside work hours only. Power-check and deliberate
   switch-offs are not resumed.
+- The activity timeline groups events by day, with a header per date ("Hari
+  ini", "Jumat · 30 Oktober 2026"). Events without a stored day count as today.
+- Tests for the day grouping, for the daily peak outside work hours, and for no
+  daily summary on a day that is not in the schedule.
 
 ### Changed
 
 - Manual pause is now 60 minutes (was 30) in the apply guard and the status
   texts.
+- The daily summary push no longer uses a fixed 18:05 and a weekday list. It is
+  sent 5 minutes after `schedule.ac_adaptive_hours` turns off, so the schedule
+  is the only place that says which days and hours count. With the current
+  Monday to Friday 07:00-18:00 schedule it still goes out at 18:05.
+- The activity card subtitle reads "Perubahan terbaru" and the empty text no
+  longer says "hari ini".
+- Documents refer to `schedule.ac_adaptive_hours` instead of "Mon-Fri".
+
+### Fixed
+
+- The activity card no longer shows an earlier day's sends under a static "Hari
+  ini" header (a Friday 17:20 command looked like Monday's).
+- The 7-day people card no longer records a peak on days outside the schedule.
+  On Saturday 2026-10-31 Frigate saw someone and `sensor.ac_lt2_people` showed
+  Friday's last count, which was stored as that day's peak. A value now counts
+  only while the schedule is on and the count is at most 30 minutes old.
+  `sensor.ac_lt2_activity` also reacts to the count commit marker so the first
+  count of a morning is not missed. AC control was never affected.
 
 ## [1.0.0] - 2026-10-30
 
@@ -65,4 +89,5 @@ First tagged release of the floor 2 pilot.
 - Long dashboard notes wrap instead of being cut off.
 - Test harness sets up the `script` domain so the shared apply script is found.
 
+[1.1.0]: https://gitlab-work/intellivision/adaptive-cooling-control/-/tags/1.1.0
 [1.0.0]: https://gitlab-work/intellivision/adaptive-cooling-control/-/tags/1.0.0

@@ -225,6 +225,11 @@ template:
       - trigger: state
         entity_id: sensor.ac_lt2_people
         id: people
+      # The commit marker of a new count is written after the count itself. Without this trigger
+      # the first count of a morning would be seen while the old count is still "stale" and be lost.
+      - trigger: state
+        entity_id: input_datetime.ac_lt2_count_time
+        id: people
     variables:
       day: "{{ now().strftime('%Y-%m-%d') }}"
       cutoff: "{{ (now() - timedelta(days=6)).strftime('%Y-%m-%d') }}"
@@ -269,7 +274,16 @@ template:
             {{ ns.r }}
           people_peak_by_day: >-
             {% set ns = namespace(r={}) %}
-            {% set now_people = states('sensor.ac_lt2_people') | int(0) %}
+            {# Count a day's peak only inside the work-hours schedule and with a fresh count. Outside
+               it sensor.ac_lt2_people can show the last count again whenever Frigate sees someone
+               (Saturday 2026-10-31 showed 1). Which days count is decided only by the schedule. #}
+            {# Freshness is computed here (same 30 minutes as stale_minutes in the count package), not
+               read from binary_sensor.ac_lt2_count_stale, whose update order versus this trigger
+               is not guaranteed. #}
+            {% set age = (now().timestamp()
+                          - (state_attr('input_datetime.ac_lt2_count_time', 'timestamp') | float(0))) / 60 %}
+            {% set counted = is_state('schedule.ac_adaptive_hours', 'on') and age <= 30 %}
+            {% set now_people = (states('sensor.ac_lt2_people') | int(0)) if counted else 0 %}
             {% set merged = old_peak | combine({day: [old_peak.get(day, 0) | int(0), now_people] | max}) %}
             {% for k, v in merged.items() if k >= cutoff %}
               {% set ns.r = ns.r | combine({k: v}) %}
@@ -718,12 +732,17 @@ automation:
     variables:
       notify_service: notify.mobile_app_cph2457
       dashboard_path: /ac-adaptive-lt2
+    # Follows schedule.ac_adaptive_hours: five minutes after the work hours of a day end. A day
+    # that is not in the schedule never turns it on, so it gets no summary, and no weekday list
+    # is kept here.
     triggers:
-      - trigger: time
-        at: "18:05:00"
+      - trigger: state
+        entity_id: schedule.ac_adaptive_hours
+        from: "on"
+        to: "off"
+        for:
+          minutes: 5
     conditions:
-      - condition: time
-        weekday: [mon, tue, wed, thu, fri]
       - condition: state
         entity_id: input_boolean.ac_adaptive_count_enabled
         state: "on"
